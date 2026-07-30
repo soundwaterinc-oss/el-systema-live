@@ -35,7 +35,29 @@ node server/relay.mjs          # :8787 で hub を配信＋WS中継
 音色保存は既存 `onSnapshot()` / `onLoadPreset(preset)` を利用。
 参照実装: `el-systema-geometry-osc/geometry-instruments/master.html`（single-file）, `mycorrhiza-beat`（Vite）。
 
+## 祭文（Liturgy）— 場が生き物になる反応層
+footer **「祭文 ▸」** でドロワーを開く。JSON で書いて **検証 → 奉じる**。
+- **応答** … ある楽器の kehai 信号（`<id>.<presence|low|high>`）が閾値を「持続」秒跨いだら、
+  別楽器へ command を撃つ（`一度` / `冷却` つき）。**楽器同士が互いを聴いて自動応答**する。
+- **祭次** … 秒指定タイムライン（テンポ無し・`揺` ジッタ・`loop` 可）。
+- 発火は卓の macro/vol 状態を経由するので **卓のノブが実際に動く**（場が卓を弾く）。雛形2種同梱。
+- スキーマ検証は `shared/el-systema-shapes.js` の `explainLiturgy`（日本語エラー）。
+
+## 場（field）の可視化
+channel strip の背後に、全楽器を黄金角スパイラルで配置し kehai で呼吸させる一枚の絵。
+presence→明るさ/脈動、low↔high→色相、silence→減衰、mute→沈む、solo→際立つ。
+祭文が発火すると source→target に**反応の弧**が走る。
+
+## シーン間モーフ
+SCENE 行の **morph** … 現在の状態から選択シーンへ、macro/vol を指定秒で時間補間（preset は着地時に適用）。
+即時の **recall** と併用。
+
 ## 構成
 - `server/relay.mjs` — 依存ゼロの http 静的配信＋WS中継（同一 :8787）。
-- `hub.html` / `hub.js` — 統合卓（field クライアント・ミキサー・MIDI・プリセット/シーン庫）。
+- `hub.html` / `hub.js` — 統合卓（field クライアント・ミキサー・MIDI・プリセット/シーン庫・シーンモーフ）。
+- `hub-field.js` — 場の可視化キャンバス。
+- `hub-liturgy.js` — 祭文（応答／祭次）エンジン。
 - `shared/` — 各楽器と共有の `el-systema-{shapes,transport,control}.js`（プロトコル）。
+
+> hub は **relay（node）を要するローカル制御卓**。GitHub Pages 等の静的配信単体では中継が無いため動かない。
+> 楽器群は各リポで Pages 配信し、hub は手元で `node server/relay.mjs` を立てて操る構成。
