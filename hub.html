@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EL·SYSTEMA LIVE — 統合演奏卓</title>
+<link rel="icon" href="data:," />
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#04080a;color:#cfe8d0;
+    font:11px/1.45 ui-monospace,Menlo,monospace;letter-spacing:.03em;overflow:hidden}
+  .wrap{display:flex;flex-direction:column;height:100%}
+  .top{display:flex;align-items:center;gap:12px;padding:8px 12px;background:linear-gradient(#04080aee,#04080a88);border-bottom:1px solid #10241f}
+  .brand{color:#d0ff5a;letter-spacing:.22em;font-weight:700}
+  .dot{width:8px;height:8px;border-radius:50%;background:#7a2a2a;display:inline-block;margin-right:5px}
+  .dot.on{background:#43d675;box-shadow:0 0 6px #43d675}
+  .bank-tabs{display:flex;gap:4px}
+  .bank-tabs button{background:#0a1418;color:#6fa588;border:1px solid #1d3a34;padding:4px 9px;border-radius:3px;cursor:pointer;font:inherit}
+  .bank-tabs button.on{border-color:#d0ff5a;color:#d0ff5a}
+  button.mini{background:#0a1418;color:#9fe8c0;border:1px solid #1d3a34;padding:4px 10px;border-radius:3px;cursor:pointer;font:inherit}
+  button.mini.active{border-color:#d0ff5a;color:#d0ff5a}
+  select,.inp{background:#0a1418;color:#9fe8c0;border:1px solid #1d3a34;padding:3px 6px;border-radius:3px;font:inherit}
+  .spacer{margin-left:auto}
+  .oled{background:#071012;border:1px solid #1d3a34;border-radius:3px;padding:5px 10px;color:#7fe8ff;min-width:220px;text-align:right}
+  .chans{display:flex;flex:1;gap:6px;padding:10px 12px;overflow-x:auto}
+  .chan{width:132px;flex:0 0 132px;display:flex;flex-direction:column;gap:6px;background:#070f1266;border:1px solid #10241f;border-radius:5px;padding:8px 7px}
+  .chan.empty{opacity:.4;border-style:dashed}
+  .chan .id{color:#9fe8c0;font-weight:700;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chan .sub{display:flex;justify-content:space-between;color:#4f7f66;font-size:9px}
+  .knobs{display:flex;gap:5px;justify-content:space-between}
+  .knob{position:relative;width:38px;height:38px;cursor:ns-resize}
+  .knob svg{display:block}
+  .knob .kl{position:absolute;top:-2px;left:0;right:0;text-align:center;color:#6fa588;font-size:9px}
+  .knob .kv{position:absolute;bottom:-1px;left:0;right:0;text-align:center;color:#9fe8c0;font-size:9px}
+  .row{display:flex;gap:6px}
+  .fader{position:relative;flex:1;min-height:96px;background:#0a1418;border:1px solid #16302b;border-radius:3px;cursor:ns-resize;overflow:hidden}
+  .fader .fill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(rgba(0,221,51,.62),rgba(0,119,34,.62))}
+  .fader .flab{position:absolute;left:4px;top:3px;color:#5f8f6a;font-size:9px;z-index:2}
+  .fader .fpct{position:absolute;left:4px;bottom:3px;color:#9fe8c0;font-size:9px;z-index:2}
+  .meter{width:8px;min-height:96px;background:#061;border:1px solid #16302b;border-radius:2px;position:relative;overflow:hidden}
+  .meter i{position:absolute;left:0;right:0;bottom:0;background:#d0ff5a}
+  .meter.sil i{background:#7a5a2a}
+  .btns{display:flex;gap:4px}
+  .btns button{flex:1;background:#0a1418;color:#6fa588;border:1px solid #1d3a34;border-radius:3px;padding:4px 0;cursor:pointer;font:inherit;font-size:10px}
+  .btns button.on{border-color:#d0ff5a;color:#d0ff5a;background:#0c1c14}
+  .btns button.solo.on{border-color:#7fe8ff;color:#7fe8ff}
+  .presetrow{display:flex;gap:4px}
+  .presetrow select{flex:1;font-size:10px;padding:2px}
+  .presetrow button{background:#0a1418;color:#7fe8ff;border:1px solid #1d3a34;border-radius:3px;cursor:pointer;font:inherit;font-size:10px;padding:2px 6px}
+  .foot{display:flex;gap:12px;align-items:center;padding:5px 12px 8px;color:#4f7f66;border-top:1px solid #10241f}
+  .foot .scenes{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+  a{color:#7fe8ff}
+  /* ─── 祭文 (Liturgy) drawer ─── */
+  .litpanel{position:fixed;left:0;right:0;bottom:0;height:44%;min-height:260px;z-index:20;
+    background:linear-gradient(#050c0eF2,#04080aF7);border-top:1px solid #16302b;
+    box-shadow:0 -14px 40px #000a;display:flex;flex-direction:column}
+  .litpanel[hidden]{display:none}
+  .litpanel.running{border-top-color:#d0ff5a}
+  .lit-head{display:flex;align-items:center;gap:6px;padding:7px 12px;border-bottom:1px solid #10241f;flex-wrap:wrap}
+  .brand2{color:#d0ff5a;letter-spacing:.16em;font-weight:700}
+  .lit-head label{color:#7fae90}
+  .lit-body{flex:1;display:flex;gap:10px;padding:10px 12px;min-height:0}
+  #litText{flex:1;min-width:0;background:#03090b;color:#bfe8c8;border:1px solid #16302b;border-radius:4px;
+    padding:8px 10px;font:11px/1.5 ui-monospace,Menlo,monospace;resize:none;tab-size:2;white-space:pre;overflow:auto}
+  .lit-side{width:300px;flex:0 0 300px;display:flex;flex-direction:column;gap:8px;min-height:0}
+  .lit-status{background:#071012;border:1px solid #1d3a34;border-radius:4px;padding:6px 9px;color:#7fe8ff;flex:0 0 auto}
+  .lit-status.bad{color:#ff9a7a;border-color:#5a2a1a}
+  .lit-rules{flex:0 0 auto;max-height:38%;overflow:auto;display:flex;flex-direction:column;gap:2px}
+  .litrule{display:grid;grid-template-columns:1fr auto 34px 30px;gap:5px;align-items:center;
+    background:#070f12;border:1px solid #10241f;border-radius:3px;padding:3px 7px;font-size:10px}
+  .litrule.dim{color:#4f7f66;display:block}
+  .litrule.fired{border-color:#d0ff5a;background:#0c1c14}
+  .litrule .rn{color:#9fe8c0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .litrule .rc{color:#6fa588}
+  .litrule .rv{color:#7fe8ff;text-align:right}
+  .litrule .rs{color:#8fbf9a;text-align:right}
+  .lit-log{flex:1;min-height:0;overflow:auto;background:#03090b;border:1px solid #10241f;border-radius:4px;
+    padding:6px 9px;color:#6fa588;font-size:10px;line-height:1.5}
+  .lit-log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* ─── 場 (field) visualization ─── */
+  .stage{position:relative;flex:1;min-height:0;display:flex}
+  #fieldCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+  .stage .chans{position:relative;z-index:1;flex:1}
+  .foot input[type=number]{-moz-appearance:textfield}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <span class="brand">EL·SYSTEMA LIVE</span>
+    <span><span class="dot" id="linkDot"></span><span id="linkTxt">field…</span></span>
+    <div class="bank-tabs" id="bankTabs"></div>
+    <span class="row">
+      <button class="mini active" id="playAll" title="全楽器 play">▶ all</button>
+      <button class="mini" id="stopAll" title="全楽器 stop">■ all</button>
+    </span>
+    <label style="color:#7fae90">master <input id="mvol" type="range" min="0" max="1" step="0.01" value="0.9" style="width:90px"></label>
+    <span class="spacer"></span>
+    <select id="midi" class="inp" title="MIDI 入力（Launch Control XL 等）"></select>
+    <span class="oled" id="oled">場に接続中… 中継サーバを起動してください</span>
+  </div>
+
+  <div class="stage">
+    <canvas id="fieldCanvas"></canvas>
+    <div class="chans" id="chans"></div>
+  </div>
+
+  <div class="foot">
+    <span class="scenes">SCENE:
+      <button class="mini" id="scCap" title="全楽器の音色＋macro＋volume を1シーンとして保存">● capture</button>
+      <select id="scSel" class="inp"></select>
+      <button class="mini" id="scRecall" title="選択シーンを全楽器へ一括呼び出し（即時）">recall</button>
+      <button class="mini" id="scMorph" title="現在の状態から選択シーンへ時間補間（macro/vol連続・preset着地）">morph</button>
+      <input id="scSecs" class="inp" type="number" min="0.2" step="0.5" value="6" style="width:48px" title="モーフ秒数">
+      <button class="mini" id="scExport" title="全設定を .json 書き出し">⬇json</button>
+      <button class="mini" id="scImport" title="設定 .json 読み込み">⬆json</button>
+      <input id="scFile" type="file" accept="application/json,.json" style="display:none">
+    </span>
+    <button class="mini" id="litToggle" title="祭文 — 楽器同士が互いを聴いて自動応答する層">祭文 ▸</button>
+    <span class="spacer">卓のノブ/フェーダーはマウス・ホイールでも演奏可 · XL3: Fader CC5–12 / Enc CC13–36 / Note40–62</span>
+  </div>
+
+  <div class="litpanel" id="liturgyPanel" hidden>
+    <div class="lit-head">
+      <span class="brand2">祭文 LITURGY</span>
+      <select id="litTemplate" class="inp" title="雛形を挿入"></select>
+      <select id="litLib" class="inp" title="保存庫"></select>
+      <button class="mini" id="litLoad">読込</button>
+      <button class="mini" id="litSaveLib" title="この祭文を保存庫へ">＋保存</button>
+      <button class="mini" id="litDel">削除</button>
+      <span class="spacer"></span>
+      <label><input type="checkbox" id="litLoop"> loop</label>
+      <button class="mini" id="litValidate" title="スキーマ検証">検証</button>
+      <button class="mini active" id="litPlay" title="応答を稼働＋祭次を再生">▶ 奉じる</button>
+      <button class="mini" id="litStop">■ 停止</button>
+      <button class="mini" id="litClose" title="閉じる">×</button>
+    </div>
+    <div class="lit-body">
+      <textarea id="litText" spellcheck="false" placeholder="祭文 JSON（雛形を選ぶと挿入されます）"></textarea>
+      <div class="lit-side">
+        <div class="lit-status" id="litStatus">祭文を書いて「検証」→「奉じる」</div>
+        <div class="lit-rules" id="litRules"></div>
+        <div class="lit-log" id="litLog"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="./shared/el-systema-shapes.js"></script>
+<script src="./shared/el-systema-transport.js"></script>
+<script src="./hub.js"></script>
+<script src="./hub-field.js"></script>
+<script src="./hub-liturgy.js"></script>
+</body>
+</html>

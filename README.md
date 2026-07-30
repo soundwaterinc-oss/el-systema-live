@@ -1,0 +1,41 @@
+# EL-SYSTEMA Live — 統合演奏卓
+
+今まで作った EL-SYSTEMA web 楽器群を **1枚の卓**からライブ演奏・ミキシングする階層。
+音色の詳細は各楽器の既存 UI で作り、卓は **ノブ3つ(macro.a/b/c)＋ボリューム＋ミュート/ソロ＋
+プリセット/シーン呼び出し** を MIDI（Novation Launch Control XL 系）で操作する。
+
+各楽器は既存の `el-systema-field` プロトコル（`ws://localhost:8787` 中継 ＋ `registerElSystemaInstrument`）で
+繋がり、卓は「場のもう1クライアント」として全楽器を制御・監視する。音は各楽器の自タブで鳴る（コントロール卓型）。
+
+## 起動（1コマンド・依存ゼロ）
+```
+node server/relay.mjs          # :8787 で hub を配信＋WS中継
+```
+- 卓を開く: **http://localhost:8787/hub.html**
+- 各楽器（deployed でも local でも）をブラウザで開くと、既定の `ws://localhost:8787` に繋がり
+  卓に自動で並ぶ（kehai 自動発見）。https 配信ページからでも `ws://localhost` は Chrome で許可される。
+
+## 使い方
+- **ノブ A/B/C** = 各楽器のコア思想を3軸に抽出した macro（0..1）。ドラッグ/ホイール/MIDIエンコーダ。
+- **VOL フェーダー** = チャンネル音量。**MUTE/SOLO**。**master** = 全 volume スケール。
+- **＋**（プリセット） = 現在の音色を snapshot 保存 → ドロップダウンで recall（loadPreset）。
+- **SCENE ● capture** = 全楽器の {音色＋macro＋volume} を1シーンに保存 → recall で一括呼び出し。
+- **⬇/⬆ json** = 卓の全設定（割当・プリセット庫・シーン）を保存/読込。
+- **BANK** = 8ch/バンク。楽器が9つ以上なら複数バンクに分かれる。
+
+## MIDI（既存「XL3」規約 = Launch Control XL）
+- Fader **CC5–12** → 各chの volume
+- Enc 上/中/下 **CC13–20 / 21–28 / 29–36** → macro.a / b / c（Relative）
+- Note **40–47** mute・**48–55** solo・**56/57** バンク±・**60/61/62** play/stop/capture
+- 実機は Novation Components で Custom Mode を上表の CC/Note に（エンコーダは Relative）。
+
+## 楽器側に必要なこと（macro 対応）
+各楽器の `onSetParam(name,value)` に **`macro.a` / `macro.b` / `macro.c` / `volume`** を実装するだけ。
+`macro.*` はその楽器のコア思想を抽出・分割・統合して内部複数パラメータへ 0..1 で写像。
+音色保存は既存 `onSnapshot()` / `onLoadPreset(preset)` を利用。
+参照実装: `el-systema-geometry-osc/geometry-instruments/master.html`（single-file）, `mycorrhiza-beat`（Vite）。
+
+## 構成
+- `server/relay.mjs` — 依存ゼロの http 静的配信＋WS中継（同一 :8787）。
+- `hub.html` / `hub.js` — 統合卓（field クライアント・ミキサー・MIDI・プリセット/シーン庫）。
+- `shared/` — 各楽器と共有の `el-systema-{shapes,transport,control}.js`（プロトコル）。
