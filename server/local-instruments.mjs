@@ -21,7 +21,7 @@ const instruments = [
 ];
 const relayInstruments = [
   { name: 'HADO / HEN', path: '/instruments/hado-hen/' },
-  { name: 'HADO / DUST', path: '/instruments/hado-dust/' },
+  { name: '波動刻 / HADO DUST', path: '/instruments/hado-dust/' },
   { name: 'HADO / FIELD', path: '/instruments/hado-field/' },
   { name: 'HADO / ORI', path: '/instruments/hado-ori/' },
   { name: 'TSUKI SOUND', path: '/instruments/tsuki-sound/' }
