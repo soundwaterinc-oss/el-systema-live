@@ -19,6 +19,13 @@ const instruments = [
   { name: 'Stonebeats / Ocean', port: 8808, root: join(desktop, 'el-systema-acid-live'), path: '/stone-beats.html' },
   { name: 'Planarian Drone', port: 8809, root: join(desktop, 'PLANARIAN-DRONE', 'site-static'), path: '/' }
 ];
+const relayInstruments = [
+  { name: 'HADO / HEN', path: '/instruments/hado-hen/' },
+  { name: 'HADO / DUST', path: '/instruments/hado-dust/' },
+  { name: 'HADO / FIELD', path: '/instruments/hado-field/' },
+  { name: 'HADO / ORI', path: '/instruments/hado-ori/' },
+  { name: 'TSUKI SOUND', path: '/instruments/tsuki-sound/' }
+];
 
 const mime = {
   '.css': 'text/css; charset=utf-8', '.gif': 'image/gif', '.html': 'text/html; charset=utf-8',
@@ -68,6 +75,9 @@ function createStaticServer(instrument) {
 
 const relay = spawn(process.execPath, [join(here, 'relay.mjs')], { stdio: 'inherit' });
 const servers = instruments.map(createStaticServer);
+for (const instrument of relayInstruments) {
+  console.log('[local] ' + instrument.name.padEnd(20) + ' http://localhost:8787' + instrument.path + '?field');
+}
 
 function shutdown(signal) {
   for (const server of servers) server.close();
