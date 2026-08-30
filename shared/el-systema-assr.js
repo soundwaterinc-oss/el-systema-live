@@ -61,6 +61,30 @@
     return buf;
   }
 
+  // 楽器別プロファイル＝仕様マトリクスの実行形。灯を押すと各器が自分に適した刺激で点く。
+  // 値: 脈=40γ深度 / 息=呼吸深度 / 眠=徐波量 / 相[Hz,深度] / 揺=SR量 / 律[BPM,量] / 体=身体量
+  var PROFILES = {
+    "hado-field":     { 脈: 0.8, 息: 0.6 },
+    "planarian-drone":{ 脈: 0.8, 息: 0.6 },
+    "hado-beat":      { 律: [110, 0.5], 脈: 0.6, 息: 0.4 },
+    "stone-beats":    { 律: [100, 0.5], 脈: 0.5 },
+    "mycorrhiza-beat":{ 律: [110, 0.5], 脈: 0.5 },
+    "hado-hen":       { 律: [120, 0.5], 揺: 0.12 },
+    "hado-dust":      { 揺: 0.25, 眠: 0.4 },
+    "particle-noise": { 揺: 0.25, 眠: 0.4, 息: 0.4 },
+    "cellnoise":      { 揺: 0.25, 眠: 0.4, 息: 0.4 },
+    "hado-ori":       { 相: [10, 0.6], 息: 0.6 },
+    "tsuki-sound":    { 相: [6, 0.6], 息: 0.6 },
+    "saya-sound":     { 相: [10, 0.5], 息: 0.5 },
+    "ocean":          { 息: 0.7, 眠: 0.4 },
+    "moss-reservoir": { 息: 0.6, 眠: 0.3 },
+    "kagome":         { 相: [10, 0.5], 息: 0.5 },
+    "phyllo":         { 相: [10, 0.5], 息: 0.5 },
+    "geo-osc":        { 脈: 0.7, 息: 0.4 },
+    "geo-generator":  { 脈: 0.7, 息: 0.4 },
+    "_default":       { 息: 0.6 }
+  };
+
   function registerElSystemaStimulus(config) {
     if (!config || !config.audioContext || !config.outputNode) throw new Error("[assr] audioContext & outputNode required");
     if (root.__elsysStim) return root.__elsysStim;   // 冪等：1オリジンに刺激層は1つ
@@ -85,6 +109,9 @@
       iRitsu: 0.10, iFuka: 0.0,                 // 息（0.1Hz 呼吸ペーサー）
       nRyou: 0.0,                               // 眠（0.8Hz 徐波）
       kRyou: 0.0,                               // 体（40Hz 身体振動）
+      aRitsu: 10, aFuka: 0.0,                   // 相（α/θ 振幅同調：律=Hz, 深=depth）
+      srLv: 0.0,                                // 揺（確率共鳴ノイズ床）
+      rasBpm: 100, rasLv: 0.0,                  // 律（RAS拍：BPM, レベル）
       offsetMs: 0,                              // 刻.差（端末クロック補正）
       level: 0.28                               // 刺激全体レベル（灯時の目標）
     };
@@ -106,8 +133,24 @@
     // カットオフ帯域(300–3000Hz)がノイズを実際に濾すので、呼吸が可聴になる。
     var padSrc = ctx.createBufferSource(); padSrc.buffer = pinkBuffer(ctx, 2.0); padSrc.loop = true;
     var breathLP = ctx.createBiquadFilter(); breathLP.type = "lowpass"; breathLP.frequency.value = 1500; breathLP.Q.value = 0.6;
+    // 相：α/θ の振幅同調を pad に掛ける（全ノード可）。intrinsic 0＋ConstantSource+osc で [1-depth,1]。
+    var padAM = ctx.createGain(); padAM.gain.value = 0;
+    var aConst = ctx.createConstantSource(); aConst.offset.value = 1; aConst.start();
+    var aOsc = ctx.createOscillator(); aOsc.type = "sine"; aOsc.frequency.value = 10;
+    var aDepth = ctx.createGain(); aDepth.gain.value = 0;
+    aConst.connect(padAM.gain); aOsc.connect(aDepth); aDepth.connect(padAM.gain); aOsc.start();
     var ikiGain = ctx.createGain(); ikiGain.gain.value = 0;
-    padSrc.connect(breathLP); breathLP.connect(ikiGain); ikiGain.connect(stimBus); padSrc.start();
+    padSrc.connect(breathLP); breathLP.connect(padAM); padAM.connect(ikiGain); ikiGain.connect(stimBus); padSrc.start();
+
+    // 揺：確率共鳴用の定常ピンクノイズ床（全ノード）
+    var srSrc = ctx.createBufferSource(); srSrc.buffer = pinkBuffer(ctx, 2.0); srSrc.loop = true;
+    var srGain = ctx.createGain(); srGain.gain.value = 0;
+    srSrc.connect(srGain); srGain.connect(stimBus); srSrc.start();
+
+    // 律：律動聴覚刺激(RAS)の拍。1kHz の短いピン(5ms)を BPM で lookahead 予約。
+    var rasFilt = ctx.createBiquadFilter(); rasFilt.type = "bandpass"; rasFilt.frequency.value = 1000; rasFilt.Q.value = 1.2;
+    rasFilt.connect(stimBus);
+    var rasNext = 0;
 
     // ── 眠：0.8Hz 徐波ピンクバースト（anchor のみ・lookahead 予約）──
     var burstFilt = ctx.createBiquadFilter(); burstFilt.type = "bandpass"; burstFilt.frequency.value = 600; burstFilt.Q.value = 0.5;
@@ -180,6 +223,22 @@
       }
     }
 
+    // 律：RAS 拍の lookahead 予約（1kHz ピン 5ms）
+    function scheduleRas(nowC) {
+      if (!P.lit || P.rasLv <= 0.001) { rasNext = 0; return; }
+      var iv = 60 / clamp(P.rasBpm, 40, 200);
+      if (!rasNext || rasNext < nowC) rasNext = nowC + 0.12;
+      while (rasNext < nowC + 0.4) {
+        var o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = 1000;
+        var g = ctx.createGain(); var lv = P.rasLv * 0.5;
+        g.gain.setValueAtTime(0.0002, rasNext);
+        g.gain.exponentialRampToValueAtTime(Math.max(0.0003, lv), rasNext + 0.002);
+        g.gain.exponentialRampToValueAtTime(0.0002, rasNext + 0.05);
+        o.connect(g); g.connect(rasFilt); o.start(rasNext); o.stop(rasNext + 0.06);
+        rasNext += iv;
+      }
+    }
+
     // ── 制御レートのスケジューラ（音の生成ではなく先行予約のみ。tab throttle 耐性）──
     var tick = null;
     function apply() {
@@ -190,8 +249,15 @@
       amDepthGain.gain.setTargetAtTime(d * 0.5, nowC, tc);
       amOsc.frequency.setTargetAtTime(clamp(P.mRitsu, 30, 50), nowC, tc);
       if (["sine", "triangle", "square"].indexOf(P.mSou) >= 0 && amOsc.type !== P.mSou) amOsc.type = P.mSou;
-      // 息（全ノード）／眠（anchor）
-      scheduleBreath(nowC); scheduleBurst(nowC);
+      // 相：α/θ 振幅同調（pad へ・全ノード）
+      var ad = clamp(P.aFuka, 0, 1);
+      aConst.offset.setTargetAtTime(1 - ad * 0.5, nowC, tc);
+      aDepth.gain.setTargetAtTime(ad * 0.5, nowC, tc);
+      aOsc.frequency.setTargetAtTime(clamp(P.aRitsu, 4, 14), nowC, tc);
+      // 揺：確率共鳴ノイズ床
+      srGain.gain.setTargetAtTime(P.lit ? clamp(P.srLv, 0, 0.5) : 0, nowC, 0.1);
+      // 息（全ノード）／眠（anchor）／律（RAS）
+      scheduleBreath(nowC); scheduleBurst(nowC); scheduleRas(nowC);
       // 各サブ層のレベルで灯＋セッションフェードを与える（stimBus は常時1）
       var se = sessionEnv();
       pulseCarG.gain.setTargetAtTime((isAnchor && P.lit) ? P.level * se : 0, nowC, 0.08);   // 脈キャリア
@@ -222,6 +288,11 @@
         case "息.深": P.iFuka = clamp(+value, 0, 1); breathAt = 0; break;
         case "眠.量": P.nRyou = clamp(+value, 0, 1); break;
         case "体.量": P.kRyou = clamp(+value, 0, 0.5); break;
+        case "相.律": P.aRitsu = clamp(+value, 4, 14); break;
+        case "相.深": P.aFuka = clamp(+value, 0, 1); break;
+        case "揺.量": P.srLv = clamp(+value, 0, 0.5); break;
+        case "律.律": P.rasBpm = clamp(+value, 40, 200); rasNext = 0; break;
+        case "律.量": P.rasLv = clamp(+value, 0, 1); break;
         case "刻.差": P.offsetMs = +value || 0; breathAt = 0; break;
         case "位": P.level = clamp(+value, 0, 1); break;   // 刺激全体レベル
         default: return false;
@@ -244,12 +315,24 @@
       });
     }
 
+    // 楽器別プロファイルを適用（灯 on 時に各器の適性モジュールを立ち上げる）
+    function applyProfile() {
+      var pr = PROFILES[id] || PROFILES["_default"]; if (!pr) return;
+      if (pr["脈"] != null) { setParam("脈.律", 40); setParam("脈.深", pr["脈"]); }
+      if (pr["息"] != null) { setParam("息.律", 0.1); setParam("息.深", pr["息"]); }
+      if (pr["眠"] != null) setParam("眠.量", pr["眠"]);
+      if (pr["相"]) { setParam("相.律", pr["相"][0]); setParam("相.深", pr["相"][1]); }
+      if (pr["揺"] != null) setParam("揺.量", pr["揺"]);
+      if (pr["律"]) { setParam("律.律", pr["律"][0]); setParam("律.量", pr["律"][1]); }
+      if (pr["体"] != null) setParam("体.量", pr["体"]);
+    }
+
     // 自己観測 silence（器の鳴り止み）で刺激も止める用フック
     function onSilence() { setParam("灯", 0); }
 
     var api = {
       id: id, role: role, setParam: setParam, start: start, stop: stop,
-      beginSession: beginSession, onSilence: onSilence,
+      beginSession: beginSession, onSilence: onSilence, applyProfile: applyProfile,
       readMonitor: readMonitor,
       state: function () { return { role: role, lit: P.lit, mon: mon, breathHz: P.iRitsu, session: session.active }; },
       params: P,
@@ -276,7 +359,7 @@
     var btn = box.querySelector("#elsys-assr-toggle"), monEl = box.querySelector("#elsys-assr-mon"), on = false;
     btn.onclick = function () {
       on = !on; try { ctx.resume(); } catch (e) {}
-      if (on) { stim.setParam("脈.律", 40); stim.setParam("脈.深", 0.8); stim.setParam("息.律", 0.1); stim.setParam("息.深", 0.6); stim.setParam("灯", 1); }
+      if (on) { stim.applyProfile(); stim.setParam("灯", 1); }   // 楽器別の適性プロファイルで点灯
       else stim.setParam("灯", 0);
       btn.textContent = on ? "◉ 灯" : "○ 灯"; btn.style.color = on ? "#04080a" : "#d0ff5a"; btn.style.background = on ? "#d0ff5a" : "#0a1a12";
     };
