@@ -35,6 +35,7 @@ INSTRUMENTS=(
   "stone-beats|$LIVE_ACID|stone-beats.html"
   "ocean|$LIVE_ACID|ocean.html"
   "planarian-drone|$DESKTOP/PLANARIAN-DRONE/dist|index.html"
+  "phyllo|$HOME/phyllo-scale|index.html"
 )
 
 mkdir -p instruments

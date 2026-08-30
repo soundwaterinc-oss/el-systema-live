@@ -6,32 +6,90 @@
 <title>EL-SYSTEMA Local Instruments</title>
 <link rel="icon" href="data:,">
 <style>
-  :root{--bg:#050a09;--panel:#091410;--line:#214637;--ink:#d7f5dc;--muted:#709581;--signal:#d0ff5a}
-  *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 15% 0,#163323 0,transparent 34%),var(--bg);color:var(--ink);font:14px/1.5 ui-monospace,Menlo,monospace}
-  main{width:min(1040px,calc(100% - 32px));margin:auto;padding:42px 0 60px}header{display:flex;align-items:end;justify-content:space-between;gap:20px;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:22px}
-  h1{margin:0;color:var(--signal);font-size:clamp(24px,5vw,52px);line-height:.95;letter-spacing:.08em}p{margin:8px 0 0;color:var(--muted)}
-  .hub{color:var(--signal);text-decoration:none;border:1px solid var(--signal);padding:10px 14px;white-space:nowrap}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
-  article{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:10px;background:linear-gradient(120deg,var(--panel),#07100d);border:1px solid var(--line);padding:14px}.n{color:var(--muted)}h2{font-size:13px;margin:0;letter-spacing:.05em}small{color:var(--muted)}
-  article a{color:var(--ink);text-decoration:none;border:1px solid var(--line);padding:7px 10px}article a:hover{color:var(--signal);border-color:var(--signal)}
+  :root{--bg:#050a09;--panel:#091410;--line:#214637;--ink:#d7f5dc;--muted:#709581;--signal:#d0ff5a;--cyan:#7fe8ff}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(circle at 15% 0,#163323 0,transparent 34%),var(--bg);color:var(--ink);font:14px/1.5 ui-monospace,Menlo,monospace}
+  main{width:min(1040px,calc(100% - 32px));margin:auto;padding:42px 0 60px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:20px;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:22px}
+  h1{margin:0;color:var(--signal);font-size:clamp(24px,5vw,52px);line-height:.95;letter-spacing:.08em}
+  p{margin:8px 0 0;color:var(--muted)}
+  .hub{color:var(--signal);text-decoration:none;border:1px solid var(--signal);padding:10px 14px;white-space:nowrap}
+  .hub:hover{background:#0c1c14}
+  h3{color:var(--muted);font-size:12px;letter-spacing:.14em;margin:26px 0 10px;font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+  article{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:10px;background:linear-gradient(120deg,var(--panel),#07100d);border:1px solid var(--line);padding:14px}
+  .n{color:var(--muted)}h2{font-size:13px;margin:0;letter-spacing:.05em}small{color:var(--muted)}
+  article a{color:var(--ink);text-decoration:none;border:1px solid var(--line);padding:7px 10px;white-space:nowrap}
+  article a:hover{color:var(--signal);border-color:var(--signal)}
+  article.core a{color:var(--cyan);border-color:#26454f}
+  article.core a:hover{border-color:var(--cyan)}
+  article.pending{opacity:.4}
+  article.pending .tag{color:var(--muted);border:1px solid var(--line);padding:7px 10px;font-size:11px;white-space:nowrap}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 2px}
+  .bar button{background:#0a1a12;color:var(--signal);border:1px solid var(--line);padding:7px 12px;font:inherit;cursor:pointer}
+  .bar button:hover{border-color:var(--signal)}
   @media(max-width:600px){header{align-items:start;flex-direction:column}.hub{width:100%;text-align:center}}
 </style>
 </head>
 <body><main>
-  <header><div><h1>LOCAL FIELD</h1><p>EL-SYSTEMA instruments / localhost</p></div><a class="hub" href="/hub.html">OPEN LIVE HUB</a></header>
-  <section class="grid" id="grid"></section>
+  <header>
+    <div><h1>LOCAL FIELD</h1><p>EL-SYSTEMA instruments / localhost:8787（単一オリジン・ネット不要）</p></div>
+    <a class="hub" href="/hub.html">OPEN LIVE HUB</a>
+  </header>
+
+  <h3>CORE</h3>
+  <section class="grid" id="core"></section>
+
+  <h3>READY — この場で鳴る</h3>
+  <div class="bar"><button id="openAll">▶ 楽器を全部開く</button><button id="reload">↻ 再取得</button></div>
+  <section class="grid" id="ready"></section>
+
+  <h3>COMING — Codex 対応後に sync で点灯</h3>
+  <section class="grid" id="pending"></section>
 </main>
 <script>
-const instruments = [
-  ['BeatGenerator',8801,'/'],['BassGenerator',8802,'/prime-pulse-monolith.html'],['籠目',8803,'/'],
-  ['ParticleNoise',8804,'/'],['GEO/OSC',8805,'/'],['GEO/OSC/HUB',8806,'/geometry-instruments/master.html'],
-  ['CellNoiseGenerator',8807,'/public/launch-20260524c.html'],['Stonebeats',8808,'/stone-beats.html'],
-  ['Ocean',8808,'/ocean.html'],['Planarian Drone',8809,'/'],['HADO / HEN',8787,'/instruments/hado-hen/'],
-  ['波動刻 / HADO DUST',8787,'/instruments/hado-dust/'],['HADO / FIELD',8787,'/instruments/hado-field/'],
-  ['HADO / ORI',8787,'/instruments/hado-ori/'],['TSUKI SOUND',8787,'/instruments/tsuki-sound/']
+// 全部 :8787 単一オリジン。楽器一覧は /instruments.json（bin/sync-instruments.sh で増える）から自動取得。
+const CORE = [
+  ['LIVE HUB（卓）', '/hub.html'],
+  ['投影 / PROJECTION', '/hub.html?view=field'],
+  ['PANDEIRO（外部音源）', '/acoustic-node.html?id=pandeiro'],
+  ['MIDI 診断', '/midi-test.html'],
 ];
-document.querySelector('#grid').innerHTML = instruments.map((item,index) => {
-  const url = `http://localhost:${item[1]}${item[2]}?field`;
-  return `<article><span class="n">${String(index+1).padStart(2,'0')}</span><div><h2>${item[0]}</h2><small>:${item[1]}</small></div><a href="${url}">OPEN</a></article>`;
-}).join('');
+const LABEL = {
+  'hado-hen':'HADŌ / HEN 波動変','hado-dust':'HADŌ / DUST 波動塵','hado-field':'HADŌ / FIELD 波動庭',
+  'hado-ori':'HADŌ / ORI 波動織','hado-beat':'HADŌ / BEAT 波動拍','tsuki-sound':'TSUKI SOUND 月',
+  'mycorrhiza-beat':'BeatGenerator','moss-reservoir':'Moss Reservoir','kagome':'籠目',
+  'particle-noise':'ParticleNoise','geo-generator':'GEO/OSC','geo-osc':'GEO/OSC/HUB',
+  'cellnoise':'CellNoiseGenerator','stone-beats':'Stonebeats','ocean':'Ocean',
+  'planarian-drone':'Planarian Drone','phyllo':'PHYLLO 植物幾何×世界律'
+};
+// bridge/バンドル待ち（CODEX-ROLLOUT-2）。sync 済みになれば自動で READY へ移る
+const PLABEL = {
+  'moss-reservoir':'Moss Reservoir','kagome':'籠目','particle-noise':'ParticleNoise','geo-generator':'GEO/OSC',
+  'geo-osc':'GEO/OSC/HUB','cellnoise':'CellNoiseGenerator','stone-beats':'Stonebeats',
+  'ocean':'Ocean','planarian-drone':'Planarian Drone'
+};
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const card = (i,name,sub,href,cls='') =>
+  `<article class="${cls}"><span class="n">${String(i+1).padStart(2,'0')}</span><div><h2>${esc(name)}</h2><small>${esc(sub)}</small></div>`+
+  (href?`<a href="${esc(href)}" target="_blank" rel="noopener">OPEN</a>`:`<span class="tag">待機</span>`)+`</article>`;
+
+document.querySelector('#core').innerHTML = CORE.map((c,i)=>card(i,c[0],c[1],c[1],'core')).join('');
+
+let readyIds = [];
+async function loadReady(){
+  try { readyIds = await (await fetch('/instruments.json',{cache:'no-store'})).json(); } catch { readyIds = []; }
+  if (!Array.isArray(readyIds)) readyIds = [];
+  document.querySelector('#ready').innerHTML = readyIds.length
+    ? readyIds.map((id,i)=>card(i, LABEL[id]||id, '/instruments/'+id+'/?field', '/instruments/'+id+'/?field')).join('')
+    : '<article><div><h2>まだ無し</h2><small>bin/sync-instruments.sh で取り込む</small></div></article>';
+  const rest = Object.keys(PLABEL).filter(id=>!readyIds.includes(id));
+  document.querySelector('#pending').innerHTML = rest.map((id,i)=>card(i, PLABEL[id], '未バンドル', null, 'pending')).join('')
+    || '<article><div><h2>全部そろった</h2><small>—</small></div></article>';
+}
+document.querySelector('#reload').onclick = loadReady;
+document.querySelector('#openAll').onclick = () => readyIds.forEach(id => window.open('/instruments/'+id+'/?field','_blank'));
+loadReady();
 </script>
 </body></html>
