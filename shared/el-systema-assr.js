@@ -371,4 +371,17 @@
   }
 
   root.registerElSystemaStimulus = registerElSystemaStimulus;
+
+  // 場接続していない器向けフォールバック：AudioContext を捕捉し destination へ「足すだけ」で自動アタッチ。
+  // bootstrap（window.__elsysId 設定→この関数呼び出し）をアプリのバンドルより前に読むこと。
+  function registerElSystemaStimulusAuto() {
+    if (root.__elsysStim || root.__elsysAutoArmed) return;
+    var NativeAC = root.AudioContext || root.webkitAudioContext; if (!NativeAC) return;
+    root.__elsysAutoArmed = true;
+    function cap(c) { if (root.__elsysStim || !c) return; try { registerElSystemaStimulus({ id: root.__elsysId || "stimulus", audioContext: c, outputNode: c.destination }); } catch (e) {} }
+    function Wrap(opts) { var c = new NativeAC(opts); cap(c); return c; }
+    Wrap.prototype = NativeAC.prototype;
+    try { root.AudioContext = Wrap; root.webkitAudioContext = Wrap; } catch (e) {}
+  }
+  root.registerElSystemaStimulusAuto = registerElSystemaStimulusAuto;
 })(typeof window !== "undefined" ? window : globalThis);
