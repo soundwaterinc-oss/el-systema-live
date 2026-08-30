@@ -1,0 +1,291 @@
+// EL-SYSTEMA ─ 刺激（ASSR）レイヤー／全楽器共通の「独立した並列の声」
+//
+// ★設計原理（control.js に同じ）: 既存器の音源・UI を一切変えない＝「足すだけ」。
+//   刺激層は自前のオシレータを持ち、自前で変調し、outputNode(=器の master bus)へ
+//   connect するだけ。fx.output と並列に足すので **リバーブ/ディレイを通らない**。
+//   灯 を消せば disconnect され、器は完全に元通り鳴る。
+//
+// 使い方（器の登録直後に併用）:
+//   const leaf = window.registerElSystemaInstrument({...});  // 既存
+//   const stim = window.registerElSystemaStimulus({
+//     id: "hado-field",
+//     audioContext: audio.ctx,
+//     outputNode:   audio.masterOut,   // ここへ「足すだけ」
+//     transport:    leaf.transport,    // 任意（maneki 受信に使う。無くても動く）
+//     role:         "anchor" | "field" // 任意（無ければ URL ?anchor / ?role= から判定）
+//   });
+//   // 器の setParam 側で: 祭祀語彙(灯/脈.*/息.*/眠.量/体.量/刻.差) を stim.setParam へ委譲
+//
+// 役割: anchor(1台) = 脈(40Hz)+眠(0.8Hz)+息  /  field = 息(0.1Hz) のみ。
+// 息の位相同期: maneki{guise,startAt(epoch)} で基準時刻を配り、各ノードが
+//   自分の AudioContext 時刻へ変換して AudioParam オートメーションで先行スケジュール
+//   （rAF/relay-ramp は使わない＝画面ロックで止まらない）。
+
+(function (root) {
+  "use strict";
+  var Shapes = root.ElSystemaShapes || null;
+  function nowMs() { return Shapes ? Shapes.nowMs() : Date.now(); }
+  function clamp(x, a, b) { return x < a ? a : (x > b ? b : x); }
+
+  function parseRole() {
+    try {
+      var q = new URLSearchParams(location.search);
+      if (/(^|[?&#])anchor/.test(location.href)) return "anchor";
+      var r = q.get("role"); if (r === "anchor" || r === "field") return r;
+    } catch (e) {}
+    return "field";
+  }
+
+  // 4:6 非対称の呼吸カーブ（吸気=前40%で上昇、呼気=後60%で下降）。cutoff(Hz)の配列。
+  function breathCurve(N, loHz, hiHz) {
+    var c = new Float32Array(N);
+    for (var i = 0; i < N; i++) {
+      var ph = i / (N - 1), env;
+      if (ph < 0.4) env = 0.5 - 0.5 * Math.cos(Math.PI * (ph / 0.4));        // 吸気↑
+      else env = 0.5 + 0.5 * Math.cos(Math.PI * ((ph - 0.4) / 0.6));         // 呼気↓
+      c[i] = loHz * Math.pow(hiHz / loHz, env);                              // 対数補間
+    }
+    return c;
+  }
+
+  // ピンクノイズ（Paul Kellet 近似）1バッファ
+  function pinkBuffer(ctx, sec) {
+    var n = Math.ceil((ctx.sampleRate || 48000) * (sec || 1)), buf = ctx.createBuffer(1, n, ctx.sampleRate || 48000), d = buf.getChannelData(0);
+    var b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (var i = 0; i < n; i++) {
+      var w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.96900 * b2 + w * 0.1538520;
+      b3 = 0.86650 * b3 + w * 0.3104856; b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+      d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11; b6 = w * 0.115926;
+    }
+    return buf;
+  }
+
+  function registerElSystemaStimulus(config) {
+    if (!config || !config.audioContext || !config.outputNode) throw new Error("[assr] audioContext & outputNode required");
+    if (root.__elsysStim) return root.__elsysStim;   // 冪等：1オリジンに刺激層は1つ
+    var ctx = config.audioContext, out = config.outputNode;
+    var id = config.id || "stimulus";
+    var role = config.role || parseRole();
+    var isAnchor = role === "anchor";
+    var transport = config.transport || null;
+
+    // ── 独立した並列の声：stimBus → limiter → out（fxを通らない＝リバーブ非経由）──
+    var stimBus = ctx.createGain(); stimBus.gain.value = 1;   // 合流母線（各サブ層のレベルで灯を制御）
+    var limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -6; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.003; limiter.release.value = 0.25;
+    var connected = false;
+    function connect() { if (!connected) { stimBus.connect(limiter); limiter.connect(out); connected = true; } }
+    function disconnect() { if (connected) { try { stimBus.disconnect(); limiter.disconnect(); } catch (e) {} connected = false; } }
+
+    // 状態（祭祀語彙）
+    var P = {
+      lit: 0,                                   // 灯（刺激 on/off）
+      mRitsu: 40.0, mFuka: 0.80, mSou: "sine",  // 脈（40Hz ASSR）
+      iRitsu: 0.10, iFuka: 0.0,                 // 息（0.1Hz 呼吸ペーサー）
+      nRyou: 0.0,                               // 眠（0.8Hz 徐波）
+      kRyou: 0.0,                               // 体（40Hz 身体振動）
+      offsetMs: 0,                              // 刻.差（端末クロック補正）
+      level: 0.28                               // 刺激全体レベル（灯時の目標）
+    };
+    var session = { startAt: 0, active: false, durMs: 60 * 60 * 1000, fadeMs: 30 * 1000 };
+
+    // ── 脈：単一の清浄なキャリア(≥150Hz)を 40Hz AM（anchor のみ）──
+    // 清浄な正弦にすることで包絡線が 40Hz 単一成分になり、実測 m が正しく出る。
+    var pulseCar = ctx.createOscillator(); pulseCar.type = "sine"; pulseCar.frequency.value = 200;
+    var pulseCarG = ctx.createGain(); pulseCarG.gain.value = 0;   // 灯&anchor 時のみ上げる
+    // gain = ConstantSource(1-depth/2) + osc(depth/2) → [1-depth,1]。osc直結禁止（80Hz化回避）。
+    var pulseGain = ctx.createGain(); pulseGain.gain.value = 0;   // intrinsic 0：gain は下の2ソースの総和のみ（[1-depth,1]）
+    var amConst = ctx.createConstantSource(); amConst.offset.value = 1; amConst.start();
+    var amOsc = ctx.createOscillator(); amOsc.type = "sine"; amOsc.frequency.value = 40;
+    var amDepthGain = ctx.createGain(); amDepthGain.gain.value = 0;   // depth/2
+    amConst.connect(pulseGain.gain); amOsc.connect(amDepthGain); amDepthGain.connect(pulseGain.gain); amOsc.start();
+    pulseCar.connect(pulseCarG); pulseCarG.connect(pulseGain); pulseGain.connect(stimBus); pulseCar.start();
+
+    // ── 息：ピンクノイズ pad を呼吸ローパス(0.1Hz)で明暗させる（全ノード）──
+    // カットオフ帯域(300–3000Hz)がノイズを実際に濾すので、呼吸が可聴になる。
+    var padSrc = ctx.createBufferSource(); padSrc.buffer = pinkBuffer(ctx, 2.0); padSrc.loop = true;
+    var breathLP = ctx.createBiquadFilter(); breathLP.type = "lowpass"; breathLP.frequency.value = 1500; breathLP.Q.value = 0.6;
+    var ikiGain = ctx.createGain(); ikiGain.gain.value = 0;
+    padSrc.connect(breathLP); breathLP.connect(ikiGain); ikiGain.connect(stimBus); padSrc.start();
+
+    // ── 眠：0.8Hz 徐波ピンクバースト（anchor のみ・lookahead 予約）──
+    var burstFilt = ctx.createBiquadFilter(); burstFilt.type = "bandpass"; burstFilt.frequency.value = 600; burstFilt.Q.value = 0.5;
+    burstFilt.connect(stimBus);
+    var pink = pinkBuffer(ctx, 1.0), burstNext = 0;
+
+    // ── 体：40Hz 正弦の独立バス（transducer 想定。out へ別ゲインで）──
+    var bodyOsc = ctx.createOscillator(); bodyOsc.type = "sine"; bodyOsc.frequency.value = 40;
+    var bodyGain = ctx.createGain(); bodyGain.gain.value = 0; bodyOsc.connect(bodyGain); bodyGain.connect(out); bodyOsc.start();
+
+    // ── 包絡線モニタ（専用 Analyser。sharedAnalyser は流用しない）──
+    var envRect = ctx.createWaveShaper();
+    (function () { var m = 1024, cv = new Float32Array(m); for (var i = 0; i < m; i++) { var x = (i / (m - 1)) * 2 - 1; cv[i] = Math.abs(x); } envRect.curve = cv; envRect.oversample = "2x"; })();
+    var envLP = ctx.createBiquadFilter(); envLP.type = "lowpass"; envLP.frequency.value = 200; envLP.Q.value = 0.7;
+    var envAn = ctx.createAnalyser(); envAn.fftSize = 32768; envAn.smoothingTimeConstant = 0;
+    pulseGain.connect(envRect); envRect.connect(envLP); envLP.connect(envAn);   // 脈経路のみ計測（他層で希釈しない）
+    var envFb = new Float32Array(envAn.frequencyBinCount);
+    var mon = { hz: 0, depth: 0 };
+    function readMonitor() {
+      // 出力(脈経路)を整流+LP した包絡線の FFT。周波数=ピーク(放物線補間)、深度=変調指数 m=2·|X(fmod)|/|X(DC)|
+      envAn.getFloatFrequencyData(envFb);
+      var binHz = (ctx.sampleRate || 48000) / envAn.fftSize;
+      var lo = Math.max(1, (3 / binHz) | 0), hi = Math.ceil(60 / binHz), pk = lo, pv = -Infinity;
+      for (var i = lo; i <= hi; i++) if (envFb[i] > pv) { pv = envFb[i]; pk = i; }
+      var dd = 0; if (pk > 0 && pk < envFb.length - 1) { var y0 = envFb[pk - 1], y1 = envFb[pk], y2 = envFb[pk + 1], den = y0 - 2 * y1 + y2; if (Math.abs(den) > 1e-9) dd = clamp(0.5 * (y0 - y2) / den, -0.5, 0.5); }
+      var dcDb = -Infinity; for (var j = 0; j <= 2 && j < envFb.length; j++) dcDb = Math.max(dcDb, envFb[j]);
+      var m = clamp(2 * Math.pow(10, (pv - dcDb) / 20), 0, 1);
+      var active = (pv - dcDb) > -40;
+      mon = { hz: active ? (pk + dd) * binHz : 0, depth: active ? m : 0 };
+      return mon;
+    }
+
+    // ── epoch → 自 AudioContext 時刻へ変換 ──
+    var t0Ctx = ctx.currentTime, t0Epoch = nowMs();
+    function epochToCtx(e) { return t0Ctx + (e - t0Epoch + P.offsetMs) / 1000; }
+
+    // ── 息：呼吸カーブを epoch グリッドに合わせて先行スケジュール（AudioParam）──
+    var breathAt = 0;  // 次に予約する周期境界（ctx時刻）
+    function scheduleBreath(nowC) {
+      if (P.iFuka <= 0.001) { breathLP.frequency.setTargetAtTime(3000, nowC, 0.2); return; }
+      var period = 1 / clamp(P.iRitsu, 0.05, 0.2);
+      var hi = 3000, lo = hi * Math.pow(0.1, P.iFuka);                  // 深いほど呼気で暗くなる(300–3000Hz)
+      var curve = breathCurve(128, lo, hi);
+      if (!breathAt || breathAt < nowC - period) {
+        // epoch 位相に合わせて次境界を決める（全ノード同期）
+        var e = nowMs() + P.offsetMs, base = session.startAt || t0Epoch;
+        var frac = (((e - base) % (period * 1000)) + period * 1000) % (period * 1000) / (period * 1000);
+        breathAt = nowC + (1 - frac) * period;
+      }
+      while (breathAt < nowC + 4) {
+        try { breathLP.frequency.setValueCurveAtTime(curve, breathAt, period); } catch (e2) { breathLP.frequency.setTargetAtTime(curve[0], breathAt, 0.1); }
+        breathAt += period;
+      }
+    }
+
+    // ── 眠：0.8Hz バースト先行予約 ──
+    function scheduleBurst(nowC) {
+      if (!isAnchor || !P.lit || P.nRyou <= 0.001) { burstNext = 0; return; }
+      if (!burstNext || burstNext < nowC) burstNext = nowC + 0.15;
+      while (burstNext < nowC + 0.4) {
+        var lv = P.nRyou * 0.12;
+        var src = ctx.createBufferSource(); src.buffer = pink; src.loop = true;
+        var g = ctx.createGain();
+        g.gain.setValueAtTime(0.0002, burstNext);
+        g.gain.exponentialRampToValueAtTime(Math.max(0.0003, lv), burstNext + 0.005);
+        g.gain.setValueAtTime(Math.max(0.0003, lv), burstNext + 0.045);
+        g.gain.exponentialRampToValueAtTime(0.0002, burstNext + 0.05);
+        src.connect(g); g.connect(burstFilt); src.start(burstNext); src.stop(burstNext + 0.06);
+        burstNext += 1.25;
+      }
+    }
+
+    // ── 制御レートのスケジューラ（音の生成ではなく先行予約のみ。tab throttle 耐性）──
+    var tick = null;
+    function apply() {
+      var nowC = ctx.currentTime, tc = 0.05;
+      // 脈（anchor のみ）
+      var d = isAnchor ? clamp(P.mFuka, 0, 1) : 0;
+      amConst.offset.setTargetAtTime(1 - d * 0.5, nowC, tc);
+      amDepthGain.gain.setTargetAtTime(d * 0.5, nowC, tc);
+      amOsc.frequency.setTargetAtTime(clamp(P.mRitsu, 30, 50), nowC, tc);
+      if (["sine", "triangle", "square"].indexOf(P.mSou) >= 0 && amOsc.type !== P.mSou) amOsc.type = P.mSou;
+      // 息（全ノード）／眠（anchor）
+      scheduleBreath(nowC); scheduleBurst(nowC);
+      // 各サブ層のレベルで灯＋セッションフェードを与える（stimBus は常時1）
+      var se = sessionEnv();
+      pulseCarG.gain.setTargetAtTime((isAnchor && P.lit) ? P.level * se : 0, nowC, 0.08);   // 脈キャリア
+      ikiGain.gain.setTargetAtTime(P.lit ? P.level * 0.7 * se : 0, nowC, 0.08);             // 息 pad
+      bodyOsc.frequency.setTargetAtTime(clamp(P.mRitsu, 30, 50), nowC, tc);
+      bodyGain.gain.setTargetAtTime((isAnchor && P.lit) ? clamp(P.kRyou, 0, 0.5) * se : 0, nowC, tc); // 体
+    }
+    function sessionEnv() {
+      if (!session.active || !session.startAt) return P.lit ? 1 : 0;
+      var e = nowMs() + P.offsetMs - session.startAt;
+      if (e < 0) return 0;
+      if (e < session.fadeMs) return e / session.fadeMs;                          // fade in 30s
+      if (e > session.durMs) { return 0; }                                        // 終了
+      if (e > session.durMs - session.fadeMs) return (session.durMs - e) / session.fadeMs; // fade out
+      return 1;
+    }
+    function start() { if (tick) return; connect(); t0Ctx = ctx.currentTime; t0Epoch = nowMs(); breathAt = 0; burstNext = 0; tick = setInterval(apply, 250); apply(); }
+    function stop() { if (tick) { clearInterval(tick); tick = null; } stimBus.gain.setTargetAtTime(0, ctx.currentTime, 0.1); }
+
+    // ── setParam（祭祀語彙）──
+    function setParam(name, value) {
+      switch (name) {
+        case "灯": P.lit = +value ? 1 : 0; if (P.lit) start(); apply(); break;
+        case "脈.律": P.mRitsu = clamp(+value, 30, 50); break;
+        case "脈.深": P.mFuka = clamp(+value, 0, 1); break;
+        case "脈.相": P.mSou = String(value); break;
+        case "息.律": P.iRitsu = clamp(+value, 0.05, 0.2); breathAt = 0; break;
+        case "息.深": P.iFuka = clamp(+value, 0, 1); breathAt = 0; break;
+        case "眠.量": P.nRyou = clamp(+value, 0, 1); break;
+        case "体.量": P.kRyou = clamp(+value, 0, 0.5); break;
+        case "刻.差": P.offsetMs = +value || 0; breathAt = 0; break;
+        case "位": P.level = clamp(+value, 0, 1); break;   // 刺激全体レベル
+        default: return false;
+      }
+      if (tick) apply();
+      return true;
+    }
+
+    // ── maneki（セッション開始宣言）受信 → 全ノードが startAt から経過を数える ──
+    function beginSession(startAtEpoch, durMs) {
+      session.startAt = startAtEpoch || nowMs();
+      if (durMs) session.durMs = durMs;
+      session.active = true; breathAt = 0; if (!tick) start(); apply();
+    }
+    if (transport && transport.onMessage) {
+      transport.onMessage(function (m) {
+        if (!m || m.t !== "maneki") return;
+        // guise が刺激セッション（"脈"/"assr" 等）のときのみ開始（他 guise は無視）
+        if (/脈|assr|stim/i.test(m.guise || "")) beginSession(m.startAt, m.durMs);
+      });
+    }
+
+    // 自己観測 silence（器の鳴り止み）で刺激も止める用フック
+    function onSilence() { setParam("灯", 0); }
+
+    var api = {
+      id: id, role: role, setParam: setParam, start: start, stop: stop,
+      beginSession: beginSession, onSilence: onSilence,
+      readMonitor: readMonitor,
+      state: function () { return { role: role, lit: P.lit, mon: mon, breathHz: P.iRitsu, session: session.active }; },
+      params: P,
+      disconnect: disconnect
+    };
+    root.__elsysStim = api;
+    if (!config.noUI && typeof document !== "undefined") injectUI(api, ctx);
+    return api;
+  }
+
+  // 全楽器共通の最小 UI（灯トグル＋実測モニタ）。楽器側コード不要で自己注入。
+  function injectUI(stim, ctx) {
+    if (document.getElementById("elsys-assr-panel")) return;
+    var box = document.createElement("div"); box.id = "elsys-assr-panel";
+    box.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:2147483000;font:11px ui-monospace,Menlo,monospace;" +
+      "background:rgba(6,13,9,.92);border:1px solid #214637;color:#a8c4ac;padding:9px 11px;min-width:196px;letter-spacing:.03em;border-radius:4px";
+    var role = stim.role === "anchor" ? "ANCHOR 刺激が設計通り届く位置" : "FIELD 体験は有効・刺激は保証外";
+    box.innerHTML =
+      '<div style="color:#7fe8ff;margin-bottom:5px">刺激 · ASSR <span style="color:#5e8864;font-size:9px">[' + role + "]</span></div>" +
+      '<button id="elsys-assr-toggle" style="font:inherit;background:#0a1a12;color:#d0ff5a;border:1px solid #214637;padding:4px 12px;cursor:pointer;border-radius:3px">○ 灯</button>' +
+      '<div id="elsys-assr-mon" style="margin-top:6px;color:#8d9dbc">包絡線 —— Hz / —— %</div>' +
+      '<div style="margin-top:5px;color:#5e8864;font-size:9px;line-height:1.5">40Hz[GENUS/ASSR]·0.1Hz[HRV]·0.8Hz[徐波]<br>研究文献の刺激パラメータ。医療機器ではありません。</div>';
+    document.body.appendChild(box);
+    var btn = box.querySelector("#elsys-assr-toggle"), monEl = box.querySelector("#elsys-assr-mon"), on = false;
+    btn.onclick = function () {
+      on = !on; try { ctx.resume(); } catch (e) {}
+      if (on) { stim.setParam("脈.律", 40); stim.setParam("脈.深", 0.8); stim.setParam("息.律", 0.1); stim.setParam("息.深", 0.6); stim.setParam("灯", 1); }
+      else stim.setParam("灯", 0);
+      btn.textContent = on ? "◉ 灯" : "○ 灯"; btn.style.color = on ? "#04080a" : "#d0ff5a"; btn.style.background = on ? "#d0ff5a" : "#0a1a12";
+    };
+    setInterval(function () {
+      var m = stim.readMonitor();
+      monEl.textContent = "包絡線 " + (m.hz ? m.hz.toFixed(1) : "——") + " Hz / 深度 " + Math.round(m.depth * 100) + "%";
+      monEl.style.color = (Math.abs(m.hz - 40) < 1.2 && m.depth > 0.02) ? "#8fe0ff" : "#8d9dbc";
+    }, 220);
+  }
+
+  root.registerElSystemaStimulus = registerElSystemaStimulus;
+})(typeof window !== "undefined" ? window : globalThis);

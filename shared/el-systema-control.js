@@ -246,9 +246,12 @@
             break;
           case "stop":
             cancelAllRamps();
+            if (stim) stim.setParam("灯", 0);
             if (typeof cb.stop === "function") cb.stop();
             break;
           case "setParam":
+            // 祭祀語彙の刺激パラメータは刺激層へ、その他は器へ
+            if (stim && /^(灯|脈|息|眠|体|相|律|揺|光|刻|位)/.test(m.name)) { stim.setParam(m.name, m.value); break; }
             if (typeof cb.setParam === "function") cb.setParam(m.name, m.value);
             break;
           case "ramp":
@@ -288,9 +291,22 @@
 
     startKehai();
 
+    // ── 刺激層の自動アタッチ（全楽器共通・足すだけ）──
+    // assr.js が読み込まれ、ctx/outputNode が渡されていれば、既存音源に触れず刺激層を並列に載せる。
+    // これにより「灯/脈/息/眠/体/相/律/揺/光」の刺激パラメータが全楽器で自動的に使えるようになる。
+    let stim = null;
+    if (typeof root.registerElSystemaStimulus === "function" && config.audioContext && config.outputNode) {
+      try {
+        stim = root.registerElSystemaStimulus({
+          id: id, audioContext: config.audioContext, outputNode: config.outputNode, transport: transport,
+        });
+      } catch (e) { /* 刺激層は任意。失敗しても器は通常動作 */ }
+    }
+
     return {
       id,
       transport,
+      stimulus: stim,
       getKehai: function () {
         const r = observer ? observer.read() : { presence: 0, low: 0, high: 0 };
         return {

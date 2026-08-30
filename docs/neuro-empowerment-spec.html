@@ -1,0 +1,417 @@
+<title>EL-SYSTEMA 神経賦活設計</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#06100d; --panel:#0b1a15; --panel-2:#0e2019; --line:#1c3a31; --line-soft:#132a23;
+    --ink:#cfe8d6; --ink-dim:#9fc2ac; --muted:#6e9583; --faint:#456657;
+    --lime:#d0ff5a; --cyan:#7fe8ff; --violet:#b79cff; --amber:#ffb25a; --teal:#5fe3c0; --caution:#ff8a5a;
+    --serif:"Shippori Mincho",Georgia,"Times New Roman",serif;
+    --sans:"Zen Kaku Gothic New",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+    --maxw:1080px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--sans); font-weight:400; line-height:1.75; letter-spacing:.01em;
+    font-size:16px;
+    background-image:
+      radial-gradient(ellipse at 12% -8%, rgba(208,255,90,.05), transparent 42%),
+      radial-gradient(ellipse at 92% 108%, rgba(127,232,255,.045), transparent 46%);
+  }
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 22px}
+  section{padding:56px 0; border-top:1px solid var(--line-soft)}
+  h1,h2,h3{font-family:var(--serif); font-weight:700; text-wrap:balance; letter-spacing:.02em; margin:0}
+  p{margin:0 0 14px; max-width:64ch}
+  a{color:var(--cyan); text-underline-offset:3px}
+  .eyebrow{font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); margin:0 0 14px}
+  .lead{font-size:18px; color:var(--ink-dim); max-width:60ch}
+  .mono{font-family:var(--mono)}
+  .num{font-variant-numeric:tabular-nums}
+
+  /* hero */
+  header.hero{padding:66px 0 40px; position:relative; overflow:hidden}
+  .kicker{font-family:var(--mono); font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:var(--lime)}
+  h1{font-size:clamp(34px,6.4vw,64px); font-weight:800; line-height:1.06; margin:16px 0 0}
+  h1 .sub{display:block; font-family:var(--sans); font-weight:500; font-size:clamp(15px,2.2vw,20px); color:var(--muted); letter-spacing:.04em; margin-top:16px; text-wrap:pretty}
+  .hero-figure{margin:34px 0 4px; border:1px solid var(--line); border-radius:10px; background:linear-gradient(180deg,var(--panel),#08130f); overflow:hidden}
+  .hero-figure canvas{display:block; width:100%; height:132px}
+  .hero-cap{display:flex; flex-wrap:wrap; gap:6px 18px; padding:9px 14px; border-top:1px solid var(--line-soft); font-family:var(--mono); font-size:11px; color:var(--muted)}
+  .hero-cap b{color:var(--cyan); font-weight:600}
+
+  /* legend chips */
+  .legend{display:flex; flex-wrap:wrap; gap:8px; margin-top:26px}
+  .chip{display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:12px; padding:5px 11px; border:1px solid var(--line); border-radius:999px; color:var(--ink-dim); background:var(--panel)}
+  .dot{width:8px; height:8px; border-radius:50%; flex:none}
+  .d-att{background:var(--lime)} .d-calm{background:var(--cyan)} .d-sleep{background:var(--violet)}
+  .d-motor{background:var(--amber)} .d-sense{background:var(--teal)}
+
+  h2{font-size:clamp(24px,3.4vw,34px); margin-bottom:8px}
+  .section-lead{color:var(--ink-dim); max-width:62ch; margin-bottom:30px}
+
+  /* module cards */
+  .modgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px}
+  .mod{border:1px solid var(--line); border-radius:10px; background:var(--panel); padding:18px 18px 16px; display:flex; flex-direction:column; gap:10px}
+  .mod-head{display:flex; align-items:baseline; gap:11px}
+  .glyph{font-family:var(--serif); font-size:30px; font-weight:800; line-height:1; color:var(--ink)}
+  .mod-name{font-family:var(--mono); font-size:12.5px; letter-spacing:.04em; color:var(--ink-dim)}
+  .mod-freq{margin-left:auto; font-family:var(--mono); font-size:12px; color:var(--lime); font-weight:600}
+  .mod h3{font-family:var(--sans); font-weight:700; font-size:15px; letter-spacing:.01em}
+  .mod p{font-size:13.5px; line-height:1.65; color:var(--ink-dim); margin:0; max-width:none}
+  .mod .cite{font-family:var(--mono); font-size:11px; color:var(--muted)}
+  .mod .out{margin-top:2px}
+  .tag{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px; padding:3px 9px; border-radius:5px; border:1px solid var(--line); color:var(--ink-dim)}
+
+  /* matrix */
+  .matrix{display:flex; flex-direction:column; gap:10px}
+  .mrow{display:grid; grid-template-columns:190px 1fr 200px; gap:18px; align-items:start; padding:16px 0; border-top:1px solid var(--line-soft)}
+  .mrow:first-child{border-top:none}
+  .m-inst .name{font-family:var(--serif); font-weight:700; font-size:18px; color:var(--ink)}
+  .m-inst .mat{font-size:12.5px; color:var(--muted); margin-top:3px; line-height:1.5}
+  .m-mid .mods{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:9px}
+  .m-mid .feat{font-size:13.5px; color:var(--ink-dim); line-height:1.6}
+  .m-out{display:flex; flex-direction:column; gap:6px}
+  .pill{font-family:var(--mono); font-size:11px; padding:3px 9px; border-radius:999px; border:1px solid var(--line); color:var(--ink-dim); background:var(--panel); white-space:nowrap; align-self:flex-start}
+  .pill.att{border-color:#4a5a1e; color:var(--lime)} .pill.calm{border-color:#2a5566; color:var(--cyan)}
+  .pill.sleep{border-color:#43386b; color:var(--violet)} .pill.motor{border-color:#6b5326; color:var(--amber)}
+  .pill.sense{border-color:#255049; color:var(--teal)}
+  .mchip{font-family:var(--mono); font-size:11px; padding:3px 8px; border-radius:5px; border:1px solid var(--line); background:var(--panel-2); color:var(--ink-dim)}
+  .mchip .g{color:var(--lime); font-weight:600}
+
+  /* cross-cutting grid */
+  .cc{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px}
+  .cc div{border:1px solid var(--line); border-left:2px solid var(--cyan); border-radius:8px; background:var(--panel); padding:15px 16px}
+  .cc h3{font-family:var(--sans); font-weight:700; font-size:14.5px; margin-bottom:6px}
+  .cc p{font-size:13px; color:var(--ink-dim); margin:0; max-width:none}
+  .cc.safe div{border-left-color:var(--caution)}
+
+  /* roadmap */
+  .road{display:flex; flex-direction:column; gap:2px; counter-reset:step}
+  .step{display:grid; grid-template-columns:44px 1fr; gap:16px; padding:15px 0; border-top:1px solid var(--line-soft)}
+  .step:first-child{border-top:none}
+  .step .n{counter-increment:step; font-family:var(--mono); font-size:13px; color:var(--lime); font-weight:600; padding-top:2px}
+  .step .n::before{content:counter(step,decimal-leading-zero)}
+  .step h3{font-family:var(--sans); font-weight:700; font-size:15px; margin-bottom:3px}
+  .step p{font-size:13.5px; color:var(--ink-dim); margin:0; max-width:66ch}
+
+  footer{padding:40px 0 64px; color:var(--muted); font-size:12.5px}
+  footer .rule{font-family:var(--mono); font-size:11px; letter-spacing:.06em; color:var(--faint); border-top:1px solid var(--line-soft); padding-top:18px; margin-top:8px}
+  .disclaimer{border:1px solid #3a2a1a; background:rgba(255,138,90,.05); border-radius:8px; padding:14px 16px; color:var(--ink-dim); font-size:13px; max-width:none; margin-top:6px}
+  .disclaimer b{color:var(--caution)}
+
+  @media (max-width:720px){
+    .mrow{grid-template-columns:1fr; gap:10px}
+    .m-out{flex-direction:row; flex-wrap:wrap}
+    section{padding:44px 0}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+  :focus-visible{outline:2px solid var(--cyan); outline-offset:2px}
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">EL-SYSTEMA · 場 → 身体・脳</div>
+    <h1>神経賦活設計
+      <span class="sub">全 web 楽器を、既存の音に触れずに「足すだけ」で神経・自律・身体へ働きかける、エビデンスベースの並列刺激プラットフォームへ拡張する仕様。</span>
+    </h1>
+
+    <figure class="hero-figure" aria-label="40Hz 搬送波を 0.1Hz 呼吸で包む刺激包絡線">
+      <canvas id="sig" width="1040" height="132"></canvas>
+      <figcaption class="hero-cap">
+        <span><b>脈</b> 40.0 Hz γ 搬送</span>
+        <span><b>息</b> 0.1 Hz 呼吸包絡（吸:呼 = 4:6）</span>
+        <span><b>灯</b> 独立した並列の声 → master へ加算・リバーブ非経由</span>
+      </figcaption>
+    </figure>
+
+    <div class="legend" aria-label="アウトカム領域">
+      <span class="chip"><span class="dot d-att"></span>注意・覚醒（γ）</span>
+      <span class="chip"><span class="dot d-calm"></span>自律・鎮静（HRV）</span>
+      <span class="chip"><span class="dot d-sleep"></span>睡眠・記憶固定（徐波）</span>
+      <span class="chip"><span class="dot d-motor"></span>運動・歩行（律動）</span>
+      <span class="chip"><span class="dot d-sense"></span>感覚・平衡（確率共鳴）</span>
+    </div>
+  </header>
+
+  <section id="principle">
+    <p class="eyebrow">01 — 設計原理</p>
+    <h2>刺激は既存の音を奪わない。並んで鳴る。</h2>
+    <p class="section-lead">EL-SYSTEMA の共有基盤（<span class="mono">el-systema-control.js</span>）は「既存器の音源・UI を一切変えない＝足すだけ」を原理とする。刺激層もこれに従い、自前のオシレータを持つ<b>独立した声</b>として各楽器の master bus へ <span class="mono">connect</span> するだけにする。</p>
+    <div class="cc">
+      <div><h3>作品の揺らぎと刺激の固定が両立</h3><p>刺激は既存信号を変調しないので、楽器本来の生成的な揺らぎを損なわない。両者は同じ信号を奪い合わず並列に足される。</p></div>
+      <div><h3>リバーブ非経由が自動保証</h3><p>fx.output と並列に足すため、残響で包絡線が平滑化されない。40Hz の変調深度が耳に届く時点で保たれる。</p></div>
+      <div><h3>灯を消せば完全に元通り</h3><p>停止は <span class="mono">disconnect</span> するのみ。楽器の音・UI・プリセットは一切変わらない。全楽器へ同じ流儀で載る。</p></div>
+    </div>
+  </section>
+
+  <section id="library">
+    <p class="eyebrow">02 — モジュール・ライブラリ</p>
+    <h2>祭祀語彙で束ねた、証拠のある刺激モジュール</h2>
+    <p class="section-lead">各モジュールは査読研究の刺激パラダイムに対応する。非エビデンス周波数（ソルフェジオ／シューマン共振等）は採用しない。楽器はその素材と性格に合うモジュールだけを選ぶ。</p>
+    <div class="modgrid">
+
+      <article class="mod">
+        <div class="mod-head"><span class="glyph">脈</span><span class="mod-name">40Hz ASSR / GENUS</span><span class="mod-freq">40.0 Hz</span></div>
+        <h3>ガンマ聴覚定常応答</h3>
+        <p>清浄な搬送波（≥150Hz）を 40Hz で振幅変調し、皮質ガンマ律動へ引き込む。単極性 AM [1-depth,1]（位相反転による 80Hz 化を回避）。</p>
+        <p class="cite">Tsai/Boyden ほか GENUS 系・聴覚定常応答(ASSR)</p>
+        <div class="out"><span class="tag"><span class="dot d-att"></span>注意・覚醒・（研究）記憶／グリンパティック</span></div>
+      </article>
+
+      <article class="mod">
+        <div class="mod-head"><span class="glyph">息</span><span class="mod-name">HRV Resonance</span><span class="mod-freq">0.1 Hz</span></div>
+        <h3>共鳴呼吸ペーサー</h3>
+        <p>周期10秒（6呼吸/分）・吸気:呼気=4:6 の非対称。音量ではなくローパスのカットオフに写像し、庭全体が同じ呼吸をする。圧受容器反射の共鳴帯。</p>
+        <p class="cite">Lehrer & Gevirtz・baroreflex resonance</p>
+        <div class="out"><span class="tag"><span class="dot d-calm"></span>迷走神経・自律鎮静・HRV 上昇</span></div>
+      </article>
+
+      <article class="mod">
+        <div class="mod-head"><span class="glyph">眠</span><span class="mod-name">CLAS / 徐波</span><span class="mod-freq">0.8 Hz</span></div>
+        <h3>徐波位相同期バースト</h3>
+        <p>50ms ピンクノイズバーストを徐波の上昇相に位相同期（閉ループ聴覚刺激）。睡眠中の記憶固定を狙う低レベル刺激。</p>
+        <p class="cite">Ngo & Born・closed-loop auditory stimulation</p>
+        <div class="out"><span class="tag"><span class="dot d-sleep"></span>睡眠徐波・記憶固定</span></div>
+      </article>
+
+      <article class="mod">
+        <div class="mod-head"><span class="glyph">体</span><span class="mod-name">Vibroacoustic</span><span class="mod-freq">30–60 Hz</span></div>
+        <h3>身体振動バス（触覚）</h3>
+        <p>40Hz 正弦を独立チャンネルへ出力し、トランスデューサ／エキサイタで身体へ触覚提示。聴覚ガンマと触覚を同期。</p>
+        <p class="cite">Vibroacoustic therapy（VAT）低周波振動</p>
+        <div class="out"><span class="tag"><span class="dot d-calm"></span>弛緩・体性感覚統合</span></div>
+      </article>
+
+      <article class="mod">
+        <div class="mod-head"><span class="glyph">律</span><span class="mod-name">RAS / 律動聴覚</span><span class="mod-freq">1.5–2.5 Hz</span></div>
+        <h3>律動聴覚刺激</h3>
+        <p>安定した拍を歩行・運動の周期に合わせ、大脳基底核-運動系を引き込む。目標 BPM ロック／タップ追従／漸進テンポ。</p>
+        <p class="cite">Thaut・Rhythmic Auditory Stimulation</p>
+        <div class="out"><span class="tag"><span class="dot d-motor"></span>歩行・運動・グルーヴ（ドパミン）</span></div>
+      </article>
+
+      <article class="mod">
+        <div class="mod-head"><span class="glyph">揺</span><span class="mod-name">Stochastic Resonance</span><span class="mod-freq">1/f</span></div>
+        <h3>確率共鳴ノイズ</h3>
+        <p>1/f（ピンク）ノイズを最適レベルで加え、微弱信号の検出・平衡・体性感覚を底上げ。レベル掃引で個人最適点を探る。</p>
+        <p class="cite">Stochastic resonance・noise-enhanced sensing</p>
+        <div class="out"><span class="tag"><span class="dot d-sense"></span>感覚鋭敏化・平衡・注意持続</span></div>
+      </article>
+
+      <article class="mod">
+        <div class="mod-head"><span class="glyph">相</span><span class="mod-name">α / θ 同調</span><span class="mod-freq">6 / 10 Hz</span></div>
+        <h3>アルファ・シータ位相同調</h3>
+        <p>搬送波を α(10Hz) または θ(6Hz) で振幅変調。α=弛緩・創造、θ=瞑想・記憶符号化の状態誘導。旋律ドローンに最適。</p>
+        <p class="cite">聴覚定常応答・α/θ 帯 entrainment</p>
+        <div class="out"><span class="tag"><span class="dot d-calm"></span>弛緩・フロー・瞑想状態</span></div>
+      </article>
+
+      <article class="mod">
+        <div class="mod-head"><span class="glyph">光</span><span class="mod-name">SSVEP / 視覚 γ</span><span class="mod-freq">40 Hz / α</span></div>
+        <h3>視覚フリッカ同調</h3>
+        <p>幾何アニメの輝度/コントラストを 40Hz（または α）で明滅させ視覚ガンマへ引き込む。<b>光過敏の安全ゲート必須</b>（深度上限・警告・オプトイン）。</p>
+        <p class="cite">SSVEP・視覚 GENUS（光刺激）</p>
+        <div class="out"><span class="tag"><span class="dot d-att"></span>視覚ガンマ・注意（安全条件下）</span></div>
+      </article>
+
+    </div>
+  </section>
+
+  <section id="matrix">
+    <p class="eyebrow">03 — 楽器別 適性マトリクス</p>
+    <h2>素材と性格が、載せるべき刺激を決める</h2>
+    <p class="section-lead">各楽器の生成的性格（拍・ノイズ・ドローン・幾何・自然音）に、機序が噛み合うモジュールと具体的な改良機能を割り当てる。1台を <b>anchor</b>（40Hz が設計通り届く特権点）、残りを <b>field</b>（0.1Hz 呼吸で同期）とする分散運用を前提。</p>
+
+    <div class="matrix">
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">HADŌ / 波動庭</div><div class="mat">量子場ドローン・持続音。基準機。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">脈</span> 40γ</span><span class="mchip"><span class="g">息</span> 0.1</span><span class="mchip"><span class="g">眠</span> 0.8</span><span class="mchip"><span class="g">体</span> VAT</span></div>
+          <div class="feat"><b>anchor 実装済</b>：単一清浄搬送 200Hz を 40Hz AM＋呼吸LP＋徐波＋身体バス。包絡線モニタで実測 40.0Hz/深度を常時表示。</div>
+        </div>
+        <div class="m-out"><span class="pill att">注意・覚醒</span><span class="pill calm">自律鎮静</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">HADŌ BEAT / 波動拍</div><div class="mat">量子場が刻むビート。拍動生成。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">律</span> RAS</span><span class="mchip"><span class="g">脈</span> 40γ</span><span class="mchip"><span class="g">息</span> 0.1</span></div>
+          <div class="feat">拍テンポを目標歩行ケイデンス（例 110 SPM）へロック／タップ追従。クリックに 40Hz AM を重ね、グルーヴを保ったままガンマを送る。漸進テンポで歩行アップトレーニング。</div>
+        </div>
+        <div class="m-out"><span class="pill motor">運動・歩行</span><span class="pill att">覚醒</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">HADŌ HEN / 波動変</div><div class="mat">加算拍子・ポリメーター。固いクリック。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">律</span> RAS</span><span class="mchip"><span class="g">揺</span> SR</span></div>
+          <div class="feat">変拍子の予測誤差で認知的関与を高める。基準拍は RAS で安定させつつ副次拍で駆動。注意持続・時間知覚のトレーニング素材。</div>
+        </div>
+        <div class="m-out"><span class="pill motor">律動認知</span><span class="pill sense">注意持続</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">HADŌ DUST / 波動塵</div><div class="mat">Ikeda 的固い粒子ビート・微小クリック。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">揺</span> SR</span><span class="mchip"><span class="g">眠</span> 0.8</span></div>
+          <div class="feat">粒子密度を 1/f に較正し確率共鳴レベルを掃引。微弱聴覚・触覚の検出閾を下げる。低レベル徐波バーストを併走。</div>
+        </div>
+        <div class="m-out"><span class="pill sense">感覚鋭敏化</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">HADŌ ORI / 波動織</div><div class="mat">コード／リフ／ソロ・世界音階と律動。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">相</span> α/θ</span><span class="mchip"><span class="g">息</span> 0.1</span></div>
+          <div class="feat">フレーズ長を呼吸周期に同調。純正律の協和で自律を鎮め、α(弛緩)/θ(瞑想) の AM を旋律搬送に選択。世界音階の情動を保持。</div>
+        </div>
+        <div class="m-out"><span class="pill calm">弛緩・フロー</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">PLANARIAN DRONE</div><div class="mat">再生ドローン・実写変性。ASSR 実装済。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">脈</span> 40γ</span><span class="mchip"><span class="g">息</span> 0.1</span><span class="mchip"><span class="g">体</span> VAT</span></div>
+          <div class="feat">独自 AM を共有 <span class="mono">assr.js</span> へ統一。再生（regeneration）の視覚変性を 0.1Hz 呼吸へ同調させ、映像-呼吸-刺激を一致させる。</div>
+        </div>
+        <div class="m-out"><span class="pill att">覚醒</span><span class="pill calm">鎮静</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">OCEAN</div><div class="mat">海・波の自然音。持続的環境音。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">息</span> 0.1</span><span class="mchip"><span class="g">眠</span> 0.8</span><span class="mchip"><span class="g">揺</span> 1/f</span></div>
+          <div class="feat">波の周期を 0.1Hz 呼吸へ引き込む最有力素材。就寝プロトコル（徐波バースト＋ピンク較正）と 60分フェード。マスキングで入眠支援。</div>
+        </div>
+        <div class="m-out"><span class="pill sleep">入眠・睡眠</span><span class="pill calm">鎮静</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">TSUKI / 月・SAYA / 紗綾形</div><div class="mat">植物細胞・直交格子のモーダル持続音。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">相</span> θ/α</span><span class="mchip"><span class="g">息</span> 0.1</span></div>
+          <div class="feat">静的な格子・カノン構造に θ 瞑想 AM と呼吸ペーサー。長時間の受動聴取（アンビエント瞑想）に適した低刺激プロファイル。</div>
+        </div>
+        <div class="m-out"><span class="pill calm">瞑想・静穏</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">GEO/OSC · 幾何楽器</div><div class="mat">幾何/物理関数の自動演奏・視覚同期。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">光</span> SSVEP</span><span class="mchip"><span class="g">脈</span> 40γ</span></div>
+          <div class="feat">幾何アニメの輝度を 40Hz/α で明滅させ視聴覚ガンマを同時提示（音＝脈, 光＝視覚）。<b>光過敏スクリーン・深度上限・オプトイン必須</b>。</div>
+        </div>
+        <div class="m-out"><span class="pill att">視聴覚 γ</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">KAGOME / 籠目 · PHYLLO</div><div class="mat">格子・植物幾何のスキャン発音。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">相</span> α</span><span class="mchip"><span class="g">息</span> 0.1</span></div>
+          <div class="feat">規則格子の反復性を α 帯へ寄せ、後頭 α（安静・視覚休息）を誘導。スキャン速度を呼吸へ従属させる。</div>
+        </div>
+        <div class="m-out"><span class="pill calm">安静・α</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">CELLNOISE · PARTICLE / MOSS</div><div class="mat">細胞/粒子ノイズ・貯水池アンビエント。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">揺</span> SR</span><span class="mchip"><span class="g">眠</span> 0.8</span><span class="mchip"><span class="g">息</span> 0.1</span></div>
+          <div class="feat">広帯域ノイズを 1/f 較正し確率共鳴／集中マスキングへ。0.1Hz 振幅呼吸と徐波バーストで受動的な鎮静・睡眠背景に。</div>
+        </div>
+        <div class="m-out"><span class="pill sense">集中・感覚</span><span class="pill sleep">睡眠背景</span></div>
+      </div>
+
+      <div class="mrow">
+        <div class="m-inst"><div class="name">STONE / MYCORRHIZA BEAT</div><div class="mat">石・菌根の拍生成（画像→ビート）。</div></div>
+        <div class="m-mid">
+          <div class="mods"><span class="mchip"><span class="g">律</span> RAS</span><span class="mchip"><span class="g">脈</span> 40γ</span></div>
+          <div class="feat">生成拍を運動同調テンポへ整流。作業リズム（覚醒維持）と運動リハの2プロファイル。タップ入力で個人ケイデンスに追従。</div>
+        </div>
+        <div class="m-out"><span class="pill motor">運動・作業</span></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="cross">
+    <p class="eyebrow">04 — 横断機能</p>
+    <h2>装置としての信頼性を支える共通層</h2>
+    <div class="cc">
+      <div><h3>anchor / field の分散モデル</h3><p>40Hz は端末間で位相同期不能（周期25ms＜ジッタ）。1台の anchor 内に閉じ、0.1Hz 呼吸のみ epoch 配布＋各端末のローカル時計で同期。場が同じ呼吸をする。</p></div>
+      <div><h3>包絡線モニタ＝信頼性の核</h3><p>各楽器の刺激出力を整流→LP→専用 FFT で復調し「実際に 40.0Hz / 深度○%」を常時表示。表示値ではなく実測値で装置の妥当性を担保する。</p></div>
+      <div><h3>祭祀語彙の統一 API</h3><p>灯 / 脈 / 息 / 眠 / 体 / 相 / 律 / 揺 / 光 を <span class="mono">setParam</span> と <span class="mono">maneki</span>(セッション宣言) で制御。hub の macro・祭文（応答ルール）から全楽器を一斉演奏。</p></div>
+      <div><h3>生体入力への発展（閉ループ）</h3><p>マイク＝呼吸、カメラ PPG＝心拍を任意入力に。呼吸ペーサーを個人の共鳴周波数へ、拍を心拍・歩調へ適応させる閉ループ生体フィードバックを将来層として設計。</p></div>
+    </div>
+  </section>
+
+  <section id="safety">
+    <p class="eyebrow">05 — 安全・統治</p>
+    <h2>効能を語らず、事実と証拠だけを置く</h2>
+    <div class="cc safe">
+      <div><h3>医療的効能表現の禁止</h3><p>「治癒・治療・効果」等を UI/README/meta に書かない（薬機法）。「研究文献に基づく刺激パラメータ／実験装置」に留め、各周波数に出典タグ [GENUS/ASSR]・[HRV]・[徐波/CLAS] を付す。</p></div>
+      <div><h3>禁忌の事前表示</h3><p>てんかん・光過敏症、心疾患、ペースメーカー、妊娠中、内耳疾患は使用前に医師へ相談。光フリッカは既定オフ・深度上限・明示オプトイン。</p></div>
+      <div><h3>曝露の管理</h3><p>マスター段 Limiter(-6dB)、推奨聴取レベル表示、セッションタイマー（既定60分・フェード各30秒）。無人検知には自己観測 kehai を使わない（原理的に不可）。</p></div>
+      <div><h3>証拠主義</h3><p>採用は査読研究の刺激パラダイムのみ。ソルフェジオ／シューマン共振等の非エビデンス周波数は追加しない。主張は再現可能な事実の記述に限る。</p></div>
+    </div>
+  </section>
+
+  <section id="road">
+    <p class="eyebrow">06 — 展開順</p>
+    <h2>動くものから、場全体へ</h2>
+    <div class="road">
+      <div class="step"><span class="n"></span><div><h3>息（0.1Hz）を全楽器へ</h3><p>独立した声ゆえ既存に触れず、分散同期も余裕を持って成立。体感が最も明確で最速に「場が同じ呼吸をする」状態を作る。共有 <span class="mono">assr.js</span> を全 public/shared へ配布し登録1行を追加。</p></div></div>
+      <div class="step"><span class="n"></span><div><h3>包絡線モニタを各楽器へ</h3><p>次に作るものを検証する道具を先に置く。刺激の妥当性を実測で見える化。</p></div></div>
+      <div class="step"><span class="n"></span><div><h3>脈（40Hz）を anchor 系ドローンへ</h3><p>HADŌ庭・PLANARIAN・ORI 等。モニタで実測しながら搬送・深度・波形を確定。</p></div></div>
+      <div class="step"><span class="n"></span><div><h3>律（RAS）を拍系へ</h3><p>BEAT/HEN/STONE/MYCORRHIZA にケイデンスロック・タップ追従・漸進テンポ。</p></div></div>
+      <div class="step"><span class="n"></span><div><h3>揺（確率共鳴）をノイズ系へ・眠を睡眠背景へ</h3><p>DUST/CELLNOISE/PARTICLE/OCEAN/MOSS に 1/f 較正・SR 掃引・徐波バースト。</p></div></div>
+      <div class="step"><span class="n"></span><div><h3>光（SSVEP）を幾何系へ（安全最優先）</h3><p>GEO/OSC に視覚フリッカ。光過敏スクリーン・深度上限・オプトインを実装してから点灯。</p></div></div>
+      <div class="step"><span class="n"></span><div><h3>生体入力の閉ループ化</h3><p>呼吸(マイク)・心拍(PPG)を取り込み、共鳴呼吸・RAS を個人へ適応。研究文脈への接続点。</p></div></div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="disclaimer"><b>免責</b>　本仕様が扱うのは研究文献に基づく感覚刺激パラメータを用いた実験装置であり、医療機器ではない。診断・治療・治癒を目的とせず、効能を主張しない。使用は各人の判断と、必要に応じた医師への相談のもとに行う。</div>
+    <div class="rule">EL-SYSTEMA · 神経賦活設計仕様 v1 — 全楽器共通 <span class="mono">shared/el-systema-assr.js</span> を核に段階展開する。</div>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  var c=document.getElementById('sig'); if(!c) return;
+  var ctx=c.getContext('2d');
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function draw(t){
+    var W=c.width,H=c.height, mid=H/2;
+    ctx.clearRect(0,0,W,H);
+    // baseline grid
+    ctx.strokeStyle='rgba(28,58,49,.7)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(W,mid); ctx.stroke();
+    // breath envelope (0.1Hz) — slow, asymmetric 4:6
+    var ph=(t*0.05)%1;               // slow visual breath
+    var env = ph<0.4 ? (0.5-0.5*Math.cos(Math.PI*(ph/0.4))) : (0.5+0.5*Math.cos(Math.PI*((ph-0.4)/0.6)));
+    var amp = (0.22 + env*0.66)*(H*0.42);
+    // 40Hz carrier under the breath
+    ctx.beginPath();
+    for(var x=0;x<=W;x++){
+      var carrier=Math.sin(x*0.42 + t*2.2);
+      var y=mid - carrier*amp;
+      x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle='rgba(208,255,90,.85)'; ctx.lineWidth=1.4; ctx.stroke();
+    // envelope outline (cyan)
+    ctx.beginPath();
+    ctx.moveTo(0,mid-amp); ctx.lineTo(W,mid-amp); ctx.moveTo(0,mid+amp); ctx.lineTo(W,mid+amp);
+    ctx.strokeStyle='rgba(127,232,255,.5)'; ctx.setLineDash([3,5]); ctx.lineWidth=1; ctx.stroke(); ctx.setLineDash([]);
+    if(!reduce) requestAnimationFrame(function(n){ draw(n/1000); });
+  }
+  if(reduce) draw(6.3); else requestAnimationFrame(function(n){ draw(n/1000); });
+})();
+</script>
