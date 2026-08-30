@@ -339,35 +339,10 @@
       disconnect: disconnect
     };
     root.__elsysStim = api;
-    if (!config.noUI && typeof document !== "undefined") injectUI(api, ctx);
+    // 常時 on：UI パネルは出さず、アタッチ時に楽器別プロファイルで自動点灯する。
+    // （config.autoLit === false のときだけ点灯を保留）
+    if (config.autoLit !== false) { try { applyProfile(); setParam("灯", 1); } catch (e) {} }
     return api;
-  }
-
-  // 全楽器共通の最小 UI（灯トグル＋実測モニタ）。楽器側コード不要で自己注入。
-  function injectUI(stim, ctx) {
-    if (document.getElementById("elsys-assr-panel")) return;
-    var box = document.createElement("div"); box.id = "elsys-assr-panel";
-    box.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:2147483000;font:11px ui-monospace,Menlo,monospace;" +
-      "background:rgba(6,13,9,.92);border:1px solid #214637;color:#a8c4ac;padding:9px 11px;min-width:196px;letter-spacing:.03em;border-radius:4px";
-    var role = stim.role === "anchor" ? "ANCHOR 刺激が設計通り届く位置" : "FIELD 体験は有効・刺激は保証外";
-    box.innerHTML =
-      '<div style="color:#7fe8ff;margin-bottom:5px">刺激 · ASSR <span style="color:#5e8864;font-size:9px">[' + role + "]</span></div>" +
-      '<button id="elsys-assr-toggle" style="font:inherit;background:#0a1a12;color:#d0ff5a;border:1px solid #214637;padding:4px 12px;cursor:pointer;border-radius:3px">○ 灯</button>' +
-      '<div id="elsys-assr-mon" style="margin-top:6px;color:#8d9dbc">包絡線 —— Hz / —— %</div>' +
-      '<div style="margin-top:5px;color:#5e8864;font-size:9px;line-height:1.5">40Hz[GENUS/ASSR]·0.1Hz[HRV]·0.8Hz[徐波]<br>研究文献の刺激パラメータ。医療機器ではありません。</div>';
-    document.body.appendChild(box);
-    var btn = box.querySelector("#elsys-assr-toggle"), monEl = box.querySelector("#elsys-assr-mon"), on = false;
-    btn.onclick = function () {
-      on = !on; try { ctx.resume(); } catch (e) {}
-      if (on) { stim.applyProfile(); stim.setParam("灯", 1); }   // 楽器別の適性プロファイルで点灯
-      else stim.setParam("灯", 0);
-      btn.textContent = on ? "◉ 灯" : "○ 灯"; btn.style.color = on ? "#04080a" : "#d0ff5a"; btn.style.background = on ? "#d0ff5a" : "#0a1a12";
-    };
-    setInterval(function () {
-      var m = stim.readMonitor();
-      monEl.textContent = "包絡線 " + (m.hz ? m.hz.toFixed(1) : "——") + " Hz / 深度 " + Math.round(m.depth * 100) + "%";
-      monEl.style.color = (Math.abs(m.hz - 40) < 1.2 && m.depth > 0.02) ? "#8fe0ff" : "#8d9dbc";
-    }, 220);
   }
 
   root.registerElSystemaStimulus = registerElSystemaStimulus;
