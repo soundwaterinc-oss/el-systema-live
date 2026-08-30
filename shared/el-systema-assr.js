@@ -183,9 +183,18 @@
       return mon;
     }
 
-    // ── epoch → 自 AudioContext 時刻へ変換 ──
+    // ── 壁時計(ms) → 自 AudioContext 時刻 の較正換算 ──
+    // getOutputTimestamp() の (contextTime, performanceTime) ペアで出力レイテンシ込みに正確対応させる。
+    // これでコンテキスト生成/サスペンドのタイミング差に依らず、全楽器が同じ壁時計グリッドへ揃う。
     var t0Ctx = ctx.currentTime, t0Epoch = nowMs();
-    function epochToCtx(e) { return t0Ctx + (e - t0Epoch + P.offsetMs) / 1000; }
+    // 壁時計(ms)→自 context 時刻。ctx.currentTime と Date.now を同瞬間に読み対応づける
+    // （同一マシンの全 context は同じ音声デバイスクロックで進むため、この対応で位相が揃う）。
+    function wallToCtx(wallMs) { return ctx.currentTime + (wallMs - nowMs()) / 1000; }
+    // 壁時計グリッド上で base からの「次の周期境界」(ms)
+    function nextBoundaryWall(periodSec, base) {
+      var per = periodSec * 1000, e = nowMs() + P.offsetMs;
+      return e + ((per - (((e - base) % per) + per) % per) % per);
+    }
 
     // ── 息：呼吸カーブを epoch グリッドに合わせて先行スケジュール（AudioParam）──
     var breathAt = 0;  // 次に予約する周期境界（ctx時刻）
@@ -195,10 +204,10 @@
       var hi = 3000, lo = hi * Math.pow(0.1, P.iFuka);                  // 深いほど呼気で暗くなる(300–3000Hz)
       var curve = breathCurve(128, lo, hi);
       if (!breathAt || breathAt < nowC - period) {
-        // epoch 位相に合わせて次境界を決める（全ノード同期）
-        var e = nowMs() + P.offsetMs, base = session.startAt || t0Epoch;
-        var frac = (((e - base) % (period * 1000)) + period * 1000) % (period * 1000) / (period * 1000);
-        breathAt = nowC + (1 - frac) * period;
+        // 共有の絶対時計グリッドの次境界を getOutputTimestamp 較正で自 context 時刻へ換算。
+        // → 生成/サスペンドのタイミング差に依らず全楽器が同じ呼吸位相で揃う（＝場が同じ呼吸をする）。
+        breathAt = wallToCtx(nextBoundaryWall(period, session.startAt || 0));
+        while (breathAt < nowC) breathAt += period;
       }
       while (breathAt < nowC + 4) {
         try { breathLP.frequency.setValueCurveAtTime(curve, breathAt, period); } catch (e2) { breathLP.frequency.setTargetAtTime(curve[0], breathAt, 0.1); }
@@ -209,7 +218,9 @@
     // ── 眠：0.8Hz バースト先行予約 ──
     function scheduleBurst(nowC) {
       if (!isAnchor || !P.lit || P.nRyou <= 0.001) { burstNext = 0; return; }
-      if (!burstNext || burstNext < nowC) burstNext = nowC + 0.15;
+      if (!burstNext || burstNext < nowC) {   // 共有の絶対時計(1.25s グリッド)へ較正整列＝全楽器で徐波が揃う
+        burstNext = wallToCtx(nextBoundaryWall(1.25, 0)); while (burstNext < nowC) burstNext += 1.25;
+      }
       while (burstNext < nowC + 0.4) {
         var lv = P.nRyou * 0.12;
         var src = ctx.createBufferSource(); src.buffer = pink; src.loop = true;
@@ -227,7 +238,9 @@
     function scheduleRas(nowC) {
       if (!P.lit || P.rasLv <= 0.001) { rasNext = 0; return; }
       var iv = 60 / clamp(P.rasBpm, 40, 200);
-      if (!rasNext || rasNext < nowC) rasNext = nowC + 0.12;
+      if (!rasNext || rasNext < nowC) {   // 共有の絶対時計(拍グリッド)へ較正整列＝同一BPMの拍が位相ロック
+        rasNext = wallToCtx(nextBoundaryWall(iv, 0)); while (rasNext < nowC) rasNext += iv;
+      }
       while (rasNext < nowC + 0.4) {
         var o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = 1000;
         var g = ctx.createGain(); var lv = P.rasLv * 0.5;
@@ -334,7 +347,7 @@
       id: id, role: role, setParam: setParam, start: start, stop: stop,
       beginSession: beginSession, onSilence: onSilence, applyProfile: applyProfile,
       readMonitor: readMonitor,
-      state: function () { return { role: role, lit: P.lit, mon: mon, breathHz: P.iRitsu, session: session.active }; },
+      state: function () { return { role: role, lit: P.lit, mon: mon, breathHz: P.iRitsu, breathCutoff: breathLP.frequency.value, session: session.active }; },
       params: P,
       disconnect: disconnect
     };
