@@ -113,7 +113,7 @@
       srLv: 0.0,                                // 揺（確率共鳴ノイズ床）
       rasBpm: 100, rasLv: 0.0,                  // 律（RAS拍：BPM, レベル）
       offsetMs: 0,                              // 刻.差（端末クロック補正）
-      level: 0.28                               // 刺激全体レベル（灯時の目標）
+      level: 0.40                               // 刺激全体レベル（灯時の目標。体感重視で引き上げ／位 で可変）
     };
     var session = { startAt: 0, active: false, durMs: 60 * 60 * 1000, fadeMs: 30 * 1000 };
 
@@ -217,7 +217,7 @@
 
     // ── 眠：0.8Hz バースト先行予約 ──
     function scheduleBurst(nowC) {
-      if (!isAnchor || !P.lit || P.nRyou <= 0.001) { burstNext = 0; return; }
+      if (!P.lit || P.nRyou <= 0.001) { burstNext = 0; return; }   // 役割で消さず、眠がある楽器で鳴らす
       if (!burstNext || burstNext < nowC) {   // 共有の絶対時計(1.25s グリッド)へ較正整列＝全楽器で徐波が揃う
         burstNext = wallToCtx(nextBoundaryWall(1.25, 0)); while (burstNext < nowC) burstNext += 1.25;
       }
@@ -256,8 +256,8 @@
     var tick = null;
     function apply() {
       var nowC = ctx.currentTime, tc = 0.05;
-      // 脈（anchor のみ）
-      var d = isAnchor ? clamp(P.mFuka, 0, 1) : 0;
+      // 脈：40Hz AM 深度（役割で消さない＝どの楽器でも 40Hz が体感できる）
+      var d = clamp(P.mFuka, 0, 1);
       amConst.offset.setTargetAtTime(1 - d * 0.5, nowC, tc);
       amDepthGain.gain.setTargetAtTime(d * 0.5, nowC, tc);
       amOsc.frequency.setTargetAtTime(clamp(P.mRitsu, 30, 50), nowC, tc);
@@ -271,12 +271,14 @@
       srGain.gain.setTargetAtTime(P.lit ? clamp(P.srLv, 0, 0.5) : 0, nowC, 0.1);
       // 息（全ノード）／眠（anchor）／律（RAS）
       scheduleBreath(nowC); scheduleBurst(nowC); scheduleRas(nowC);
-      // 各サブ層のレベルで灯＋セッションフェードを与える（stimBus は常時1）
+      // 各サブ層のレベルで灯＋セッションフェードを与える（stimBus は常時1）。
+      // ※単一体験では役割で消さない：プロファイルが指定したモジュールを実際に鳴らす（体感重視）。
+      //   anchor/field は 40Hz の“端末間位相同期”の区別のみに使う（下の scheduleBurst 等でも同様）。
       var se = sessionEnv();
-      pulseCarG.gain.setTargetAtTime((isAnchor && P.lit) ? P.level * se : 0, nowC, 0.08);   // 脈キャリア
-      ikiGain.gain.setTargetAtTime(P.lit ? P.level * 0.7 * se : 0, nowC, 0.08);             // 息 pad
+      pulseCarG.gain.setTargetAtTime((P.lit && P.mFuka > 0.001) ? P.level * se : 0, nowC, 0.08);  // 脈キャリア(40Hz γ)
+      ikiGain.gain.setTargetAtTime(P.lit ? P.level * 0.7 * se : 0, nowC, 0.08);                    // 息 pad
       bodyOsc.frequency.setTargetAtTime(clamp(P.mRitsu, 30, 50), nowC, tc);
-      bodyGain.gain.setTargetAtTime((isAnchor && P.lit) ? clamp(P.kRyou, 0, 0.5) * se : 0, nowC, tc); // 体
+      bodyGain.gain.setTargetAtTime((P.lit && P.kRyou > 0.001) ? clamp(P.kRyou, 0, 0.5) * se : 0, nowC, tc); // 体
     }
     function sessionEnv() {
       if (!session.active || !session.startAt) return P.lit ? 1 : 0;
