@@ -82,12 +82,14 @@ for row in "${INSTRUMENTS[@]}"; do
   cp shared/el-systema-control.js "$dest/shared/el-systema-control.js" 2>/dev/null || true
   cp shared/el-systema-shapes.js  "$dest/shared/el-systema-shapes.js"  2>/dev/null || true
   cp shared/el-systema-transport.js "$dest/shared/el-systema-transport.js" 2>/dev/null || true
-  # entry html に assr の script を注入（未挿入時のみ）
-  if [ -f "$dest/$entry" ] && ! grep -q "el-systema-assr.js" "$dest/$entry"; then
-    if grep -q "el-systema-control.js" "$dest/$entry"; then
-      sed -i '' -E 's#(<script[^>]*el-systema-control\.js[^>]*></script>)#\1\'$'\n''    <script src="./shared/el-systema-assr.js"></script>#' "$dest/$entry" 2>/dev/null || true
+  # control.js を読む **全ての** html に assr の script を注入（未挿入時のみ）。
+  # entry だけに注入すると、同じ bundle 内の別 html（ocean/stone-beats.html 等）が
+  # 公開側の「全楽器 assr」状態と食い違い、同期のたびに差分が出る。
+  while IFS= read -r -d '' html; do
+    if grep -q "el-systema-control.js" "$html" && ! grep -q "el-systema-assr.js" "$html"; then
+      sed -i '' -E 's#(<script[^>]*el-systema-control\.js[^>]*></script>)#\1\'$'\n''    <script src="./shared/el-systema-assr.js"></script>#' "$html" 2>/dev/null || true
     fi
-  fi
+  done < <(find "$dest" -type f -name '*.html' -not -path '*/node_modules/*' -print0)
 
   if [ "$entry" != "index.html" ]; then
     cat > "$dest/index.html" <<EOF
